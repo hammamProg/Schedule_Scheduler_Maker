@@ -1,1 +1,48 @@
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Cairo", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    overflow-x: clip;
+    font-family: var(--font-sans);
+  }
+
+  #root {
+    min-height: 100dvh;
+    min-height: 100svh;
+  }
+}
+
+/* Warm paper-like shell; subtle top light */
+.app-shell {
+  background-color: #f5f4f0;
+  background-image:
+    radial-gradient(ellipse 100% 60% at 50% -30%, rgba(13, 148, 136, 0.09), transparent 55%),
+    linear-gradient(180deg, #fafaf8 0%, #f5f4f0 40%, #eeede8 100%);
+}
+
+/* Smooth horizontal scroll for wide schedule table on touch devices */
+.schedule-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+}
+
+/* Force 24h-style time control: hide AM/PM in Chromium / WebKit */
+.time-input-24h::-webkit-datetime-edit-ampm-field,
+.time-input-24h::-webkit-datetime-edit-meridiem-field {
+  display: none;
+}
+
+/* Applied only during PNG export (then removed) */
+.schedule-png-export-hidden {
+  display: none !important;
+}
