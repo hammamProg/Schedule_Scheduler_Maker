@@ -209,6 +209,16 @@ type TableSnapshot = {
   times: Record<string, PeriodTimeSlot>;
 };
 
+/** In-memory undo/redo (⌘/Ctrl+Z, ⌘/Ctrl+Shift+Z); not persisted. */
+type UndoableAppSnapshot = {
+  schedule: TableSnapshot['schedule'];
+  teachers: Teacher[];
+  subjects: Subject[];
+  times: Record<string, PeriodTimeSlot>;
+  schoolName: string;
+  scheduleDate: string;
+};
+
 /** Older saves used selectedDay + dates map. */
 type LegacySnapshotFields = {
   scheduleDate?: string;
@@ -312,13 +322,78 @@ function resolveSnapshotScheduleDate(snap: LoadedTableSnapshot): string {
 const ALL_GRADES: Grade[] = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر', '١١', '١٢'];
 const PERIODS: Period[] = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة', 'السابعة'];
 
+/** First period starts 08:00; each session 35 min, then 5 min break before the next period starts. */
+const STANDARD_SESSION_MINUTES = 35;
+const STANDARD_BREAK_MINUTES = 5;
+
+function minutesFromMidnightToHHMM(totalMinutes: number): string {
+  const h = Math.floor(totalMinutes / 60) % 24;
+  const m = totalMinutes % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function buildStandardPeriodTimes(periods: readonly Period[]): Record<string, PeriodTimeSlot> {
+  const dayStartMin = 8 * 60;
+  const block = STANDARD_SESSION_MINUTES + STANDARD_BREAK_MINUTES;
+  const out: Record<string, PeriodTimeSlot> = {};
+  for (let i = 0; i < periods.length; i++) {
+    const p = periods[i];
+    const startMin = dayStartMin + i * block;
+    const endMin = startMin + STANDARD_SESSION_MINUTES;
+    out[p] = {
+      start: minutesFromMidnightToHHMM(startMin),
+      end: minutesFromMidnightToHHMM(endMin),
+    };
+  }
+  return out;
+}
+
 const SCHEDULE_PNG_EXPORT_HIDE_CLASS = 'schedule-png-export-hidden';
+
+/** Naqsh-tech contribution — site footer and bottom of PNG export. */
+const NAQSH_TECH_ATTRIBUTION_AR =
+  'تطوير هذا الحل بمساهمة شركة نقش تك للتقنية (Naqsh-tech) لمساعدة المدارس والمعلمين، بالتعاون مع المعلمة الفاضلة قدر عادل في مدرسة الشهيدة رهام دوابشة.';
 
 function scheduleCellStorageKey(period: Period, grade: Grade): string {
   return `${period}\u0000${grade}`;
 }
 
+/** Same calendar day + period: one teacher in two or more grades → all those cells' storage keys. Empty teacherId is ignored. */
+function teacherCollisionCellKeys(
+  day: Day,
+  schedule: Record<string, Record<string, Record<string, string>>>,
+  subjects: Subject[]
+): Set<string> {
+  const subjectById = new Map(subjects.map((s) => [s.id, s]));
+  const keys = new Set<string>();
+  const dayRow = schedule[day];
+  for (const period of PERIODS) {
+    const byTeacher = new Map<string, Grade[]>();
+    for (const grade of ALL_GRADES) {
+      const sid = dayRow?.[period]?.[grade] ?? '';
+      if (!sid) continue;
+      const sub = subjectById.get(sid);
+      const tid = (sub?.teacherId ?? '').trim();
+      if (!tid) continue;
+      let list = byTeacher.get(tid);
+      if (!list) {
+        list = [];
+        byTeacher.set(tid, list);
+      }
+      list.push(grade);
+    }
+    for (const grades of byTeacher.values()) {
+      if (grades.length < 2) continue;
+      for (const g of grades) {
+        keys.add(scheduleCellStorageKey(period, g));
+      }
+    }
+  }
+  return keys;
+}
+
 const SCHEDULE_CELL_CLIPBOARD_MARK = 'psm.scheduleCell.v1' as const;
+const SCHEDULE_RANGE_CLIPBOARD_MARK = 'psm.scheduleRange.v1' as const;
 
 function stringifyScheduleCellClipboard(subjectId: string): string {
   return JSON.stringify({ app: SCHEDULE_CELL_CLIPBOARD_MARK, subjectId });
@@ -336,6 +411,141 @@ function parseScheduleCellClipboard(text: string): string | null {
   } catch {
     return null;
   }
+}
+
+type ScheduleRangePayload = {
+  app: typeof SCHEDULE_RANGE_CLIPBOARD_MARK;
+  rows: number;
+  cols: number;
+  /** Row-major subject ids; empty string = empty cell */
+  cells: string[][];
+};
+
+function stringifyScheduleRangeClipboard(matrix: string[][]): string {
+  const rows = matrix.length;
+  const cols = rows === 0 ? 0 : Math.max(...matrix.map((r) => r.length));
+  return JSON.stringify({
+    app: SCHEDULE_RANGE_CLIPBOARD_MARK,
+    rows,
+    cols,
+    cells: matrix,
+  } satisfies ScheduleRangePayload);
+}
+
+function parseScheduleRangeClipboard(text: string): ScheduleRangePayload | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  try {
+    const o = JSON.parse(trimmed) as {
+      app?: string;
+      rows?: unknown;
+      cols?: unknown;
+      cells?: unknown;
+    };
+    if (o.app !== SCHEDULE_RANGE_CLIPBOARD_MARK) return null;
+    if (typeof o.rows !== 'number' || typeof o.cols !== 'number' || !Array.isArray(o.cells)) return null;
+    const cells = o.cells as unknown[];
+    const matrix: string[][] = [];
+    for (const row of cells) {
+      if (!Array.isArray(row)) return null;
+      matrix.push(row.map((c) => (typeof c === 'string' ? c : '')));
+    }
+    if (matrix.length !== o.rows) return null;
+    for (const r of matrix) {
+      if (r.length !== o.cols) return null;
+    }
+    return { app: SCHEDULE_RANGE_CLIPBOARD_MARK, rows: o.rows, cols: o.cols, cells: matrix };
+  } catch {
+    return null;
+  }
+}
+
+type GridCoord = { period: Period; grade: Grade };
+
+function periodGradeIndices(c: GridCoord): { pi: number; gi: number } {
+  return { pi: PERIODS.indexOf(c.period), gi: ALL_GRADES.indexOf(c.grade) };
+}
+
+/** Inclusive bounding box in index space; returns null if invalid. */
+function selectionBBox(a: GridCoord, b: GridCoord): { minPi: number; maxPi: number; minGi: number; maxGi: number } | null {
+  const ia = periodGradeIndices(a);
+  const ib = periodGradeIndices(b);
+  if (ia.pi < 0 || ia.gi < 0 || ib.pi < 0 || ib.gi < 0) return null;
+  return {
+    minPi: Math.min(ia.pi, ib.pi),
+    maxPi: Math.max(ia.pi, ib.pi),
+    minGi: Math.min(ia.gi, ib.gi),
+    maxGi: Math.max(ia.gi, ib.gi),
+  };
+}
+
+function isCellInSelectionRange(
+  period: Period,
+  grade: Grade,
+  range: { anchor: GridCoord; extent: GridCoord } | null
+): boolean {
+  if (!range) return false;
+  const box = selectionBBox(range.anchor, range.extent);
+  if (!box) return false;
+  const { pi, gi } = periodGradeIndices({ period, grade });
+  if (pi < 0 || gi < 0) return false;
+  return pi >= box.minPi && pi <= box.maxPi && gi >= box.minGi && gi <= box.maxGi;
+}
+
+function buildScheduleRangeMatrix(
+  day: Day,
+  anchor: GridCoord,
+  extent: GridCoord,
+  schedule: Record<string, Record<string, Record<string, string>>>
+): string[][] | null {
+  const box = selectionBBox(anchor, extent);
+  if (!box) return null;
+  const rows: string[][] = [];
+  for (let pi = box.minPi; pi <= box.maxPi; pi++) {
+    const row: string[] = [];
+    for (let gi = box.minGi; gi <= box.maxGi; gi++) {
+      const period = PERIODS[pi];
+      const grade = ALL_GRADES[gi];
+      row.push(schedule[day]?.[period]?.[grade] ?? '');
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+function applyScheduleRangePaste(
+  day: Day,
+  originPeriod: Period,
+  originGrade: Grade,
+  payload: ScheduleRangePayload,
+  validSubjectIds: Set<string>,
+  prev: Record<string, Record<string, Record<string, string>>>
+): Record<string, Record<string, Record<string, string>>> {
+  const oi = PERIODS.indexOf(originPeriod);
+  const oj = ALL_GRADES.indexOf(originGrade);
+  if (oi < 0 || oj < 0) return prev;
+  const next = { ...prev };
+  const nextDay = { ...(next[day] ?? {}) };
+  for (let r = 0; r < payload.rows; r++) {
+    const pi = oi + r;
+    if (pi >= PERIODS.length) break;
+    const period = PERIODS[pi];
+    const periodRow = { ...(nextDay[period] ?? {}) };
+    for (let c = 0; c < payload.cols; c++) {
+      const gi = oj + c;
+      if (gi >= ALL_GRADES.length) break;
+      const grade = ALL_GRADES[gi];
+      const sid = payload.cells[r]?.[c] ?? '';
+      if (sid === '') {
+        delete periodRow[grade];
+      } else if (validSubjectIds.has(sid)) {
+        periodRow[grade] = sid;
+      }
+    }
+    nextDay[period] = periodRow;
+  }
+  next[day] = nextDay;
+  return next;
 }
 
 /**
@@ -412,6 +622,23 @@ function normalizeTimesRecord(raw: unknown): Record<string, PeriodTimeSlot> {
   return out;
 }
 
+/** Fill missing periods with standard slots; keep any period that already has a start or end set. */
+function mergePeriodTimesWithDefaults(normalized: Record<string, PeriodTimeSlot>): Record<string, PeriodTimeSlot> {
+  const defaults = buildStandardPeriodTimes(PERIODS);
+  const out: Record<string, PeriodTimeSlot> = { ...defaults };
+  for (const p of PERIODS) {
+    const slot = normalized[p];
+    if (slot && (slot.start || slot.end)) {
+      out[p] = { start: slot.start, end: slot.end };
+    }
+  }
+  return out;
+}
+
+function deserializeTimesRecord(parsed: unknown): Record<string, PeriodTimeSlot> {
+  return mergePeriodTimesWithDefaults(normalizeTimesRecord(parsed));
+}
+
 // Custom hook for local storage
 function useLocalStorage<T>(key: string, initialValue: T, deserialize?: (parsed: unknown) => T) {
   const [storedValue, setStoredValue] = useState<T>(() => {
@@ -445,8 +672,8 @@ export default function App() {
   const [schedule, setSchedule] = useLocalStorage<Record<string, Record<string, Record<string, string>>>>('scheduler_data_v2', {});
   const [times, setTimes] = useLocalStorage<Record<string, PeriodTimeSlot>>(
     'scheduler_times',
-    {},
-    normalizeTimesRecord
+    buildStandardPeriodTimes(PERIODS),
+    deserializeTimesRecord
   );
   const [scheduleDate, setScheduleDate] = useLocalStorage<string>(
     'scheduler_schedule_date',
@@ -476,23 +703,155 @@ export default function App() {
     period: PERIODS[0],
     grade: ALL_GRADES[0],
   }));
+  /** Non-null = rectangular selection (inclusive). Null = single-cell focus only. */
+  const [rangeSelection, setRangeSelection] = useState<{ anchor: GridCoord; extent: GridCoord } | null>(null);
   const [cellSubjectFilter, setCellSubjectFilter] = useState('');
   const [cellSubjectHighlight, setCellSubjectHighlight] = useState(0);
   const [confirmState, setConfirmState] = useState<ConfirmState>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
   const tableRef = useRef<HTMLDivElement>(null);
+  /** Recover from any stuck `schedule-png-export-active` on the table wrapper (hides time inputs). */
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        tableRef.current?.classList.remove('schedule-png-export-active');
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cellSubjectSearchRef = useRef<HTMLInputElement>(null);
   const scheduleCellRefs = useRef<Map<string, HTMLTableCellElement>>(new Map());
   const prevEditingCellRef = useRef<typeof editingCell>(null);
-  const scheduleGridNudgeFocusRef = useRef(false);
   const scheduleClipboardFallbackRef = useRef<string | null>(null);
+  const rangeShiftAnchorRef = useRef<GridCoord>({ period: PERIODS[0], grade: ALL_GRADES[0] });
+  const rangeDragAnchorRef = useRef<GridCoord | null>(null);
+  const rangePointerDownRef = useRef(false);
   const subjectsLatestRef = useRef<Subject[]>(subjects);
   const scheduleDateLatestRef = useRef(scheduleDate);
   subjectsLatestRef.current = subjects;
   scheduleDateLatestRef.current = scheduleDate;
 
+  const stateForUndoRef = useRef<UndoableAppSnapshot>({
+    schedule,
+    teachers,
+    subjects,
+    times,
+    schoolName,
+    scheduleDate,
+  });
+  stateForUndoRef.current = { schedule, teachers, subjects, times, schoolName, scheduleDate };
+
+  const editingCellRef = useRef<EditingCell | null>(null);
+  editingCellRef.current = editingCell;
+
+  const undoPastRef = useRef<UndoableAppSnapshot[]>([]);
+  const undoFutureRef = useRef<UndoableAppSnapshot[]>([]);
+  const applyingHistoryRef = useRef(false);
+  const debouncedUndoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const MAX_UNDO_STEPS = 50;
+
+  const cloneUndoSnapshot = (s: UndoableAppSnapshot): UndoableAppSnapshot => JSON.parse(JSON.stringify(s));
+
+  const pushUndo = () => {
+    if (applyingHistoryRef.current) return;
+    const snap = cloneUndoSnapshot(stateForUndoRef.current);
+    undoPastRef.current = [...undoPastRef.current.slice(-(MAX_UNDO_STEPS - 1)), snap];
+    undoFutureRef.current = [];
+  };
+
+  /** One undo entry for a burst of edits (time inputs, name/date fields). */
+  const pushDebouncedUndoGroup = () => {
+    if (applyingHistoryRef.current) return;
+    if (debouncedUndoTimerRef.current === null) {
+      const snap = cloneUndoSnapshot(stateForUndoRef.current);
+      undoPastRef.current = [...undoPastRef.current.slice(-(MAX_UNDO_STEPS - 1)), snap];
+      undoFutureRef.current = [];
+    } else {
+      clearTimeout(debouncedUndoTimerRef.current);
+    }
+    debouncedUndoTimerRef.current = setTimeout(() => {
+      debouncedUndoTimerRef.current = null;
+    }, 450);
+  };
+
+  const applySnapshotFromHistory = (snap: UndoableAppSnapshot) => {
+    applyingHistoryRef.current = true;
+    setSchedule(snap.schedule);
+    setTeachers(snap.teachers);
+    setSubjects(snap.subjects);
+    setTimes(snap.times);
+    setSchoolName(snap.schoolName);
+    setScheduleDate(snap.scheduleDate);
+    queueMicrotask(() => {
+      applyingHistoryRef.current = false;
+    });
+  };
+
+  const performUndo = () => {
+    if (applyingHistoryRef.current) return;
+    const past = undoPastRef.current;
+    if (past.length === 0) return;
+    const prevSnap = past[past.length - 1];
+    const curSnap = cloneUndoSnapshot(stateForUndoRef.current);
+    undoPastRef.current = past.slice(0, -1);
+    undoFutureRef.current = [...undoFutureRef.current.slice(-(MAX_UNDO_STEPS - 1)), curSnap];
+    applySnapshotFromHistory(prevSnap);
+  };
+
+  const performRedo = () => {
+    if (applyingHistoryRef.current) return;
+    const future = undoFutureRef.current;
+    if (future.length === 0) return;
+    const nextSnap = future[future.length - 1];
+    const curSnap = cloneUndoSnapshot(stateForUndoRef.current);
+    undoFutureRef.current = future.slice(0, -1);
+    undoPastRef.current = [...undoPastRef.current.slice(-(MAX_UNDO_STEPS - 1)), curSnap];
+    applySnapshotFromHistory(nextSnap);
+  };
+
+  const performUndoRef = useRef(performUndo);
+  const performRedoRef = useRef(performRedo);
+  performUndoRef.current = performUndo;
+  performRedoRef.current = performRedo;
+
+  useEffect(() => {
+    return () => {
+      if (debouncedUndoTimerRef.current) clearTimeout(debouncedUndoTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.key.toLowerCase() !== 'z') return;
+      if (editingCellRef.current) return;
+
+      const t = e.target;
+      if (t instanceof HTMLElement) {
+        const tag = t.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (t.isContentEditable) return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.shiftKey) {
+        performRedoRef.current();
+      } else {
+        performUndoRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
+
   const selectedDay = useMemo(() => isoDateToArabicWeekday(scheduleDate), [scheduleDate]);
+
+  const teacherCollisionKeys = useMemo(
+    () => teacherCollisionCellKeys(selectedDay, schedule, subjects),
+    [selectedDay, schedule, subjects]
+  );
 
   /** One-time: migrate from legacy `scheduler_dates` or set today if empty. */
   useEffect(() => {
@@ -582,12 +941,13 @@ export default function App() {
   const closeConfirm = () => setConfirmState(prev => ({ ...prev, isOpen: false }));
 
   const applySnapshot = (snap: LoadedTableSnapshot) => {
+    pushUndo();
     setScheduleDate(resolveSnapshotScheduleDate(snap));
     setSchoolName(typeof snap.schoolName === 'string' ? snap.schoolName : '');
     setTeachers(snap.teachers);
     setSubjects(snap.subjects);
     setSchedule(snap.schedule);
-    setTimes(normalizeTimesRecord(snap.times as unknown));
+    setTimes(mergePeriodTimesWithDefaults(normalizeTimesRecord(snap.times as unknown)));
   };
 
   const openSaveModal = () => {
@@ -638,6 +998,7 @@ export default function App() {
     setActiveSavedTableId(entry.id);
     setHistoryOpen(false);
     setEditingCell(null);
+    setRangeSelection(null);
     setGridFocus({ period: PERIODS[0], grade: ALL_GRADES[0] });
   };
 
@@ -654,13 +1015,15 @@ export default function App() {
       'جدول جديد',
       'سيتم مسح الجدول الحالي من الشاشة (المعلمون، المواد، والخلايا). يمكنك حفظه في السجل أولاً من «حفظ في السجل». هل تتابع؟',
       () => {
+        pushUndo();
         setScheduleDate(todayISODate());
         setTeachers([]);
         setSubjects([]);
         setSchedule({});
-        setTimes({});
+        setTimes(buildStandardPeriodTimes(PERIODS));
         setActiveSavedTableId(null);
         setEditingCell(null);
+        setRangeSelection(null);
         setGridFocus({ period: PERIODS[0], grade: ALL_GRADES[0] });
         setEditingTeacherId(null);
         setEditingSubjectId(null);
@@ -706,19 +1069,26 @@ export default function App() {
     prevEditingCellRef.current = editingCell;
     if (wasOpen !== null && editingCell === null) {
       requestAnimationFrame(() => {
-        const el = scheduleCellRefs.current.get(scheduleCellStorageKey(gridFocus.period, gridFocus.grade));
-        el?.focus();
+        requestAnimationFrame(() => {
+          const el = scheduleCellRefs.current.get(scheduleCellStorageKey(gridFocus.period, gridFocus.grade));
+          el?.focus({ preventScroll: true });
+        });
       });
     }
   }, [editingCell, gridFocus]);
 
   useEffect(() => {
-    if (editingCell) return;
-    if (!scheduleGridNudgeFocusRef.current) return;
-    scheduleGridNudgeFocusRef.current = false;
-    const el = scheduleCellRefs.current.get(scheduleCellStorageKey(gridFocus.period, gridFocus.grade));
-    el?.focus();
-  }, [gridFocus, editingCell]);
+    const endDrag = () => {
+      rangePointerDownRef.current = false;
+      rangeDragAnchorRef.current = null;
+    };
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+    return () => {
+      window.removeEventListener('pointerup', endDrag);
+      window.removeEventListener('pointercancel', endDrag);
+    };
+  }, []);
 
   const handleSaveTeacher = (e: React.FormEvent) => {
     e.preventDefault();
@@ -737,11 +1107,13 @@ export default function App() {
     setTeacherNameError('');
 
     if (editingTeacherId) {
+      pushUndo();
       setTeachers((prev) =>
         prev.map((t) => (t.id === editingTeacherId ? { ...t, name: normalized } : t))
       );
       setEditingTeacherId(null);
     } else {
+      pushUndo();
       setTeachers((prev) => [...prev, { id: newEntityId(), name: normalized }]);
     }
     setNewTeacherName('');
@@ -764,6 +1136,7 @@ export default function App() {
       'حذف معلم',
       `هل أنت متأكد من حذف "${t.name}"؟ ستُزال ربطه من المواد التي يدرّسها.`,
       () => {
+        pushUndo();
         setTeachers((prev) => prev.filter((x) => x.id !== t.id));
         setSubjects((prev) =>
           prev.map((s) => (s.teacherId === t.id ? { ...s, teacherId: '' } : s))
@@ -796,11 +1169,13 @@ export default function App() {
     setSubjectPairError('');
 
     if (editingSubjectId) {
+      pushUndo();
       setSubjects((prev) =>
         prev.map((s) => (s.id === editingSubjectId ? { ...s, name: newSubject.trim(), teacherId: tid } : s))
       );
       setEditingSubjectId(null);
     } else {
+      pushUndo();
       setSubjects((prev) => [
         ...prev,
         {
@@ -833,6 +1208,7 @@ export default function App() {
       'حذف مادة',
       `هل أنت متأكد من حذف مادة "${subject.name}"؟ لن يتم حذفها من الجدول المحفوظ مسبقاً.`,
       () => {
+        pushUndo();
         setSubjects(prev => prev.filter(s => s.id !== subject.id));
         closeConfirm();
       }
@@ -860,6 +1236,7 @@ export default function App() {
         if (Array.isArray(imported)) {
           const valid = imported.filter((i: LegacySubjectRow) => i && i.id && i.name);
           if (valid.length === 0) return;
+          pushUndo();
           const { teachers: impTeachers, subjects: rawSubs } = migrateLegacySubjectsToTeachers(valid);
           const { subjects: impSubjects, idRemap } = dedupeSubjectsByPair(rawSubs);
           setTeachers(impTeachers);
@@ -868,6 +1245,7 @@ export default function App() {
             setSchedule((s) => remapScheduleSubjectIds(s, idRemap));
           }
         } else if (imported && typeof imported === 'object' && Array.isArray(imported.subjects)) {
+          pushUndo();
           const tList = Array.isArray(imported.teachers) ? imported.teachers : [];
           const validTeachers = tList
             .filter((t: Teacher) => t && t.id && t.name)
@@ -892,29 +1270,65 @@ export default function App() {
   };
 
   const handlePeriodTimeChange = (period: Period, field: 'start' | 'end', value: string) => {
+    pushDebouncedUndoGroup();
     setTimes((prev) => {
       const slot = prev[period] ?? { start: '', end: '' };
       return { ...prev, [period]: { ...slot, [field]: value } };
     });
   };
 
-  const handleCellClick = (day: Day, period: Period, grade: Grade, filterPrefill?: string) => {
+  /** Move grid focus and focus the DOM cell after React commits (double rAF avoids Strict Mode / layout races). */
+  const focusScheduleCell = (period: Period, grade: Grade) => {
+    setGridFocus({ period, grade });
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scheduleCellRefs.current.get(scheduleCellStorageKey(period, grade))?.focus({ preventScroll: true });
+      });
+    });
+  };
+
+  const openCellEditor = (day: Day, period: Period, grade: Grade, filterPrefill?: string) => {
     setGridFocus({ period, grade });
     setEditingCell(
       filterPrefill !== undefined ? { day, period, grade, filterPrefill } : { day, period, grade }
     );
   };
 
-  const pasteScheduleCellFromClipboard = async (period: Period, grade: Grade) => {
+  const clearScheduleCellAt = (day: Day, period: Period, grade: Grade) => {
+    if (!(schedule[day]?.[period]?.[grade])) return;
+    pushUndo();
+    setSchedule((prev) => {
+      const next = { ...prev };
+      if (next[day]?.[period]) {
+        const row = { ...next[day][period] };
+        delete row[grade];
+        next[day] = { ...next[day], [period]: row };
+      }
+      return next;
+    });
+  };
+
+  const pasteScheduleFromClipboard = async (period: Period, grade: Grade) => {
     let text = '';
     try {
       text = await navigator.clipboard.readText();
     } catch {
       /* use in-app fallback */
     }
+    const fallback = scheduleClipboardFallbackRef.current ?? '';
+    const rangePayload = parseScheduleRangeClipboard(text) ?? parseScheduleRangeClipboard(fallback);
+    if (rangePayload) {
+      const subs = subjectsLatestRef.current;
+      const valid = new Set(subs.map((s) => s.id));
+      const day = isoDateToArabicWeekday(scheduleDateLatestRef.current || todayISODate());
+      pushUndo();
+      setSchedule((prev) => applyScheduleRangePaste(day, period, grade, rangePayload, valid, prev));
+      return;
+    }
+
     let subjectId = parseScheduleCellClipboard(text);
     if (subjectId === null) {
-      subjectId = parseScheduleCellClipboard(scheduleClipboardFallbackRef.current ?? '');
+      subjectId = parseScheduleCellClipboard(fallback);
     }
     if (subjectId === null) return;
 
@@ -922,6 +1336,7 @@ export default function App() {
     if (subjectId !== '' && !subs.some((s) => s.id === subjectId)) return;
 
     const day = isoDateToArabicWeekday(scheduleDateLatestRef.current || todayISODate());
+    pushUndo();
     setSchedule((prev) => {
       const next = { ...prev };
       if (!next[day]) next[day] = {};
@@ -945,68 +1360,115 @@ export default function App() {
     const pi = PERIODS.indexOf(period);
     const gi = ALL_GRADES.indexOf(grade);
 
+    if (e.key === 'Escape') {
+      if (rangeSelection) {
+        e.preventDefault();
+        setRangeSelection(null);
+      }
+      return;
+    }
+
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') {
       e.preventDefault();
-      const subjectId = schedule[selectedDay]?.[period]?.[grade] ?? '';
-      const payload = stringifyScheduleCellClipboard(subjectId);
+      const day = selectedDay;
+      let matrix: string[][];
+      if (rangeSelection) {
+        const m = buildScheduleRangeMatrix(day, rangeSelection.anchor, rangeSelection.extent, schedule);
+        matrix = m ?? [[schedule[day]?.[period]?.[grade] ?? '']];
+      } else {
+        matrix = [[schedule[day]?.[period]?.[grade] ?? '']];
+      }
+      const payload = stringifyScheduleRangeClipboard(matrix);
       scheduleClipboardFallbackRef.current = payload;
       void navigator.clipboard.writeText(payload).catch(() => {});
       return;
     }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v') {
       e.preventDefault();
-      void pasteScheduleCellFromClipboard(period, grade);
+      void pasteScheduleFromClipboard(period, grade);
+      return;
+    }
+
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (rangeSelection) {
+        const box = selectionBBox(rangeSelection.anchor, rangeSelection.extent);
+        if (box) {
+          e.preventDefault();
+          const day = selectedDay;
+          pushUndo();
+          setSchedule((prev) => {
+            const next = { ...prev };
+            const nextDay = { ...(next[day] ?? {}) };
+            for (let rpi = box.minPi; rpi <= box.maxPi; rpi++) {
+              const p = PERIODS[rpi];
+              const periodRow = { ...(nextDay[p] ?? {}) };
+              for (let rgi = box.minGi; rgi <= box.maxGi; rgi++) {
+                delete periodRow[ALL_GRADES[rgi]];
+              }
+              nextDay[p] = periodRow;
+            }
+            next[day] = nextDay;
+            return next;
+          });
+        }
+        return;
+      }
+      const subjectId = schedule[selectedDay]?.[period]?.[grade] ?? '';
+      if (!subjectId) return;
+      e.preventDefault();
+      clearScheduleCellAt(selectedDay, period, grade);
       return;
     }
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
+      setRangeSelection(null);
       if (pi < PERIODS.length - 1) {
-        scheduleGridNudgeFocusRef.current = true;
-        setGridFocus({ period: PERIODS[pi + 1], grade });
+        focusScheduleCell(PERIODS[pi + 1], grade);
       }
       return;
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
+      setRangeSelection(null);
       if (pi > 0) {
-        scheduleGridNudgeFocusRef.current = true;
-        setGridFocus({ period: PERIODS[pi - 1], grade });
+        focusScheduleCell(PERIODS[pi - 1], grade);
       }
       return;
     }
     // RTL layout: physical ArrowLeft moves toward the visual start side (higher grade index here).
     if (e.key === 'ArrowLeft') {
       e.preventDefault();
+      setRangeSelection(null);
       if (gi < ALL_GRADES.length - 1) {
-        scheduleGridNudgeFocusRef.current = true;
-        setGridFocus({ period, grade: ALL_GRADES[gi + 1] });
+        focusScheduleCell(period, ALL_GRADES[gi + 1]);
       }
       return;
     }
     if (e.key === 'ArrowRight') {
       e.preventDefault();
+      setRangeSelection(null);
       if (gi > 0) {
-        scheduleGridNudgeFocusRef.current = true;
-        setGridFocus({ period, grade: ALL_GRADES[gi - 1] });
+        focusScheduleCell(period, ALL_GRADES[gi - 1]);
       }
       return;
     }
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      handleCellClick(selectedDay, period, grade);
+      openCellEditor(selectedDay, period, grade);
       return;
     }
     if (isCellTypingKey(e)) {
       e.preventDefault();
-      handleCellClick(selectedDay, period, grade, e.key);
+      openCellEditor(selectedDay, period, grade, e.key);
     }
   };
 
   const handleSelectSubject = (subjectId: string) => {
     if (!editingCell) return;
     const { day, period, grade } = editingCell;
-    
+
+    pushUndo();
     setSchedule(prev => {
       const newSchedule = { ...prev };
       if (!newSchedule[day]) newSchedule[day] = {};
@@ -1026,6 +1488,7 @@ export default function App() {
       'هل أنت متأكد من تفريغ هذه الحصة؟',
       () => {
         const { day, period, grade } = editingCell;
+        pushUndo();
         setSchedule(prev => {
           const newSchedule = { ...prev };
           if (newSchedule[day] && newSchedule[day][period]) {
@@ -1044,16 +1507,11 @@ export default function App() {
     const root = tableRef.current;
     const day = selectedDay;
 
-    const periodRowHasExportContent = (p: Period) => {
-      const slot = times[p] ?? { start: '', end: '' };
-      if (slot.start || slot.end) return true;
-      return ALL_GRADES.some((g) => Boolean(schedule[day]?.[p]?.[g]));
-    };
+    /** PNG includes only periods with at least one subject; time alone does not count as content. */
+    const periodRowHasExportContent = (p: Period) =>
+      ALL_GRADES.some((g) => Boolean(schedule[day]?.[p]?.[g]));
 
-    let periodsForExport = PERIODS.filter(periodRowHasExportContent);
-    if (periodsForExport.length === 0) {
-      periodsForExport = [...PERIODS];
-    }
+    const periodsForExport = PERIODS.filter(periodRowHasExportContent);
 
     const gradesForExport = ALL_GRADES.filter((g) =>
       periodsForExport.some((p) => Boolean(schedule[day]?.[p]?.[g]))
@@ -1423,7 +1881,10 @@ export default function App() {
                     id="school-name"
                     type="text"
                     value={schoolName}
-                    onChange={(e) => setSchoolName(e.target.value)}
+                    onChange={(e) => {
+                      pushDebouncedUndoGroup();
+                      setSchoolName(e.target.value);
+                    }}
                     placeholder="يظهر أعلى الجدول وفي صورة PNG"
                     className="w-full min-w-0 min-h-[44px] rounded-lg border border-stone-200 bg-stone-50/90 px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none text-stone-900 font-medium"
                   />
@@ -1439,7 +1900,10 @@ export default function App() {
                     id="schedule-date"
                     type="date"
                     value={scheduleDate || ''}
-                    onChange={(e) => setScheduleDate(e.target.value)}
+                    onChange={(e) => {
+                      pushDebouncedUndoGroup();
+                      setScheduleDate(e.target.value);
+                    }}
                     className="w-full min-w-0 min-h-[44px] border-none bg-stone-50/90 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none text-stone-900 font-medium"
                   />
                   <p className="text-xs text-stone-600 sm:mr-2 sm:mt-0 mt-1 leading-snug">
@@ -1457,23 +1921,47 @@ export default function App() {
               </button>
             </div>
             <p className="mt-3 text-center text-xs text-stone-500 leading-relaxed print:hidden">
-              نسخ/لصق الخلية: ركّز خلية الحصة ثم{' '}
+              تحديد عدة خلايا: اسحب من خلية إلى أخرى، أو انقر خلية ثم{' '}
+              <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
+                Shift
+              </kbd>
+              +نقر لتوسيع المستطيل. النسخ/اللصق: ركّز الخلية التي يبدأ منها اللصق ثم{' '}
               <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
                 ⌘C
-              </kbd>{' '}
-              /{' '}
+              </kbd>
+              /
               <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
                 Ctrl+C
-              </kbd>{' '}
-              للنسخ،{' '}
+              </kbd>
+              {' '}و
               <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
                 ⌘V
-              </kbd>{' '}
-              /{' '}
+              </kbd>
+              /
               <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
                 Ctrl+V
-              </kbd>{' '}
-              للصق.
+              </kbd>
+              . التراجع / الإعادة خارج حقول النص:{' '}
+              <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
+                ⌘Z
+              </kbd>
+              /
+              <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
+                Ctrl+Z
+              </kbd>
+              {' '}و
+              <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
+                ⇧⌘Z
+              </kbd>
+              /
+              <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
+                Ctrl+Shift+Z
+              </kbd>
+              .{' '}
+              <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
+                Esc
+              </kbd>
+              يلغي التحديد المتعدد.
             </p>
           </div>
 
@@ -1500,7 +1988,7 @@ export default function App() {
               <table
                 role="grid"
                 aria-label={`جدول الحصص — ${selectedDay}`}
-                className="w-full text-right border-separate border-spacing-0 text-sm sm:text-base"
+                className="w-full select-none text-right border-separate border-spacing-0 text-sm sm:text-base"
               >
                 <thead>
                   <tr className="border-b-2 border-stone-200 bg-stone-100 text-stone-900">
@@ -1549,7 +2037,7 @@ export default function App() {
                               lang="en-GB"
                               value={timeSlot.start}
                               onChange={(e) => handlePeriodTimeChange(period, 'start', e.target.value)}
-                              className="time-input-24h min-w-0 w-[4.75rem] sm:w-[5.25rem] rounded-md border-0 bg-transparent py-0.5 text-center text-[11px] sm:text-sm font-bold text-stone-800 outline-none focus:ring-2 focus:ring-teal-400 [color-scheme:light]"
+                              className="time-input-24h min-w-0 w-[4.75rem] sm:w-[5.25rem] select-text rounded-md border-0 bg-transparent py-0.5 text-center text-[11px] sm:text-sm font-bold text-stone-800 outline-none focus:ring-2 focus:ring-teal-400 [color-scheme:light]"
                               aria-label={`بداية الحصة ${period}`}
                             />
                           </div>
@@ -1562,7 +2050,7 @@ export default function App() {
                               lang="en-GB"
                               value={timeSlot.end}
                               onChange={(e) => handlePeriodTimeChange(period, 'end', e.target.value)}
-                              className="time-input-24h min-w-0 w-[4.75rem] sm:w-[5.25rem] rounded-md border-0 bg-transparent py-0.5 text-center text-[11px] sm:text-sm font-bold text-stone-800 outline-none focus:ring-2 focus:ring-teal-400 [color-scheme:light]"
+                              className="time-input-24h min-w-0 w-[4.75rem] sm:w-[5.25rem] select-text rounded-md border-0 bg-transparent py-0.5 text-center text-[11px] sm:text-sm font-bold text-stone-800 outline-none focus:ring-2 focus:ring-teal-400 [color-scheme:light]"
                               aria-label={`نهاية الحصة ${period}`}
                             />
                           </div>
@@ -1581,6 +2069,8 @@ export default function App() {
                             : subjectObj.name
                           : cellValue;
                         const isGridFocused = gridFocus.period === period && gridFocus.grade === grade;
+                        const hasTeacherCollision = teacherCollisionKeys.has(scheduleCellStorageKey(period, grade));
+                        const inRangeSelection = isCellInSelectionRange(period, grade, rangeSelection);
 
                         return (
                           <td
@@ -1593,14 +2083,69 @@ export default function App() {
                             }}
                             role="gridcell"
                             tabIndex={isGridFocused ? 0 : -1}
-                            aria-label={`${period}، ${grade}${displayValue ? `، ${displayValue}` : ''}`}
+                            aria-selected={inRangeSelection ? true : undefined}
+                            aria-label={`${period}، ${grade}${displayValue ? `، ${displayValue}` : ''}${hasTeacherCollision ? '، تعارض: نفس المعلم في صفين أو أكثر في هذه الحصة' : ''}، انقر مرتين لاختيار المادة`}
                             onFocus={() => setGridFocus({ period, grade })}
                             onKeyDown={(e) => handleScheduleCellKeyDown(e, period, grade)}
-                            onClick={() => handleCellClick(selectedDay, period, grade)}
-                            className="p-1.5 sm:p-3 border-l border-stone-200/80 text-center cursor-pointer hover:bg-teal-50 transition-colors group relative touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                            onPointerDown={(e) => {
+                              if (e.button !== 0 || editingCell) return;
+                              rangePointerDownRef.current = true;
+                              rangeDragAnchorRef.current = { period, grade };
+                            }}
+                            onPointerEnter={(e) => {
+                              if (!rangePointerDownRef.current || editingCell) return;
+                              if (e.buttons !== 1) return;
+                              const a = rangeDragAnchorRef.current;
+                              if (!a) return;
+                              if (a.period === period && a.grade === grade) return;
+                              rangeShiftAnchorRef.current = a;
+                              setRangeSelection({ anchor: a, extent: { period, grade } });
+                            }}
+                            onClick={(e) => {
+                              if (e.shiftKey) {
+                                setGridFocus({ period, grade });
+                                setRangeSelection({
+                                  anchor: rangeShiftAnchorRef.current,
+                                  extent: { period, grade },
+                                });
+                                requestAnimationFrame(() => {
+                                  requestAnimationFrame(() => {
+                                    scheduleCellRefs.current
+                                      .get(scheduleCellStorageKey(period, grade))
+                                      ?.focus({ preventScroll: true });
+                                  });
+                                });
+                                return;
+                              }
+                              rangeShiftAnchorRef.current = { period, grade };
+                              setRangeSelection(null);
+                              focusScheduleCell(period, grade);
+                            }}
+                            onDoubleClick={(e) => {
+                              e.preventDefault();
+                              setRangeSelection(null);
+                              openCellEditor(selectedDay, period, grade);
+                            }}
+                            className={`p-1.5 sm:p-3 border-l border-stone-200/80 text-center cursor-pointer transition-colors group relative touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white ${
+                              inRangeSelection
+                                ? hasTeacherCollision
+                                  ? 'bg-red-100/55 ring-1 ring-inset ring-red-400/85 hover:bg-red-50/90 focus-visible:ring-red-500'
+                                  : 'bg-teal-100/70 ring-1 ring-inset ring-teal-400/90 hover:bg-teal-100/80 focus-visible:ring-teal-500'
+                                : hasTeacherCollision
+                                  ? 'hover:bg-red-50/90 focus-visible:ring-red-500'
+                                  : 'hover:bg-teal-50 focus-visible:ring-teal-500'
+                            }`}
                           >
-                            <div className={`min-h-[2.75rem] sm:min-h-[3.5rem] flex items-center justify-center rounded-lg sm:rounded-xl p-1.5 sm:p-2 transition-all text-xs sm:text-sm leading-snug ${displayValue ? 'bg-teal-100/90 text-stone-900 font-bold border border-teal-300 shadow-sm' : 'text-stone-400 border border-transparent group-hover:border-teal-300 border-dashed'}`}>
-                              {displayValue || <span className="print:hidden text-[11px] sm:text-sm">اضغط للإضافة</span>}
+                            <div
+                              className={`min-h-[2.75rem] sm:min-h-[3.5rem] flex items-center justify-center rounded-lg sm:rounded-xl p-1.5 sm:p-2 transition-all text-xs sm:text-sm leading-snug ${
+                                displayValue
+                                  ? hasTeacherCollision
+                                    ? 'bg-red-100/95 text-stone-900 font-bold border border-red-400 shadow-sm'
+                                    : 'bg-teal-100/90 text-stone-900 font-bold border border-teal-300 shadow-sm'
+                                  : 'text-stone-400 border border-transparent group-hover:border-teal-300 border-dashed'
+                              }`}
+                            >
+                              {displayValue || <span className="print:hidden text-[11px] sm:text-sm">انقر مرتين للإضافة</span>}
                               {displayValue ? null : <span className="hidden print:inline">—</span>}
                             </div>
                           </td>
@@ -1611,10 +2156,19 @@ export default function App() {
                   })}
                 </tbody>
               </table>
+              <p className="mt-4 sm:mt-6 pt-4 sm:pt-5 border-t border-stone-200/90 text-center text-[11px] sm:text-sm text-stone-500 leading-relaxed max-w-2xl mx-auto px-2">
+                {NAQSH_TECH_ATTRIBUTION_AR}
+              </p>
             </div>
           </div>
         </section>
       </main>
+
+      <footer className="print:hidden border-t border-stone-200/90 bg-stone-100/80 mt-auto">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-5 text-center">
+          <p className="text-xs sm:text-sm text-stone-600 leading-relaxed">{NAQSH_TECH_ATTRIBUTION_AR}</p>
+        </div>
+      </footer>
 
       {/* Cell Editor Modal */}
       {editingCell && (
