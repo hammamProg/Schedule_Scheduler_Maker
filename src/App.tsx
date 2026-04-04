@@ -1078,7 +1078,10 @@ export default function App() {
     const currentId = schedule[editingCell.day]?.[editingCell.period]?.[editingCell.grade] ?? '';
     const idx = currentId ? filteredForHighlight.findIndex((s) => s.id === currentId) : -1;
     setCellSubjectHighlight(idx >= 0 ? idx : 0);
-    const id = window.requestAnimationFrame(() => cellSubjectSearchRef.current?.focus());
+    const id = window.requestAnimationFrame(() => {
+      cellSubjectSearchRef.current?.focus();
+      cellSubjectSearchRef.current?.select();
+    });
     return () => window.cancelAnimationFrame(id);
   }, [editingCell, schedule, subjects, teachers]);
 
@@ -1650,32 +1653,32 @@ export default function App() {
 
   return (
     <div
-      className="app-shell min-h-svh min-h-dvh text-stone-900 font-sans pb-[max(1rem,env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)]"
+      className="app-shell min-h-svh min-h-dvh text-stone-900 font-sans text-base leading-relaxed antialiased pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(0.5rem,env(safe-area-inset-top))]"
       dir="rtl"
     >
       {/* Header */}
       <header className="print:hidden border-b border-stone-800/80 bg-gradient-to-b from-stone-950 to-stone-900 text-white shadow-[0_4px_24px_-4px_rgba(0,0,0,0.35)]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-5 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
           <div className="flex items-center gap-3 min-w-0">
-            <Calendar className="h-7 w-7 sm:h-8 sm:w-8 shrink-0 text-teal-300" />
-            <h1 className="text-lg sm:text-2xl font-extrabold tracking-tight leading-snug text-white">
+            <Calendar className="h-8 w-8 sm:h-9 sm:w-9 shrink-0 text-teal-300" aria-hidden />
+            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight leading-snug text-white">
               صانع الجداول المدرسية
             </h1>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-6 sm:space-y-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-7 sm:space-y-8">
         {/* Saved tables toolbar */}
         <div className="print:hidden overflow-hidden rounded-2xl border border-stone-200/90 bg-white/90 shadow-[0_1px_0_0_rgba(255,255,255,0.8)_inset,0_8px_32px_-12px_rgba(15,23,42,0.12)] backdrop-blur-sm">
-          <div className="flex flex-col gap-4 p-4 sm:p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-5 p-5 sm:p-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-start gap-3 sm:items-center">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-teal-600 text-white shadow-md shadow-teal-900/20 ring-4 ring-teal-600/15">
-                <History className="h-5 w-5" strokeWidth={2} />
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-teal-600 text-white shadow-md shadow-teal-900/20 ring-4 ring-teal-600/15">
+                <History className="h-6 w-6" strokeWidth={2} aria-hidden />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-base font-extrabold text-stone-900">سجل الجداول</p>
+                  <p className="text-lg font-extrabold text-stone-900">سجل الجداول</p>
                   <span
                     className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${
                       activeSavedName
@@ -1686,34 +1689,34 @@ export default function App() {
                     {activeSavedName ? 'من السجل' : 'مسودة'}
                   </span>
                 </div>
-                <p className="mt-1 text-sm leading-relaxed text-stone-600 sm:truncate">
+                <p className="mt-1.5 text-base leading-relaxed text-stone-600 sm:truncate">
                   {activeSavedName
                     ? `تعديل: ${activeSavedName}`
                     : 'لم يُحمّل جدول من السجل — التعديلات على النسخة الحالية فقط'}
                 </p>
               </div>
             </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
               <button
                 type="button"
                 onClick={() => setHistoryOpen(true)}
-                className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm font-bold text-stone-800 shadow-sm transition-colors hover:border-stone-300 hover:bg-stone-50 touch-manipulation sm:w-auto"
+                className="inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-5 py-3 text-base font-bold text-stone-800 shadow-sm transition-colors hover:border-stone-300 hover:bg-stone-50 touch-manipulation sm:w-auto"
               >
-                <FolderOpen className="h-4 w-4 shrink-0 text-stone-500" />
+                <FolderOpen className="h-5 w-5 shrink-0 text-stone-500" aria-hidden />
                 <span>فتح السجل</span>
               </button>
               <button
                 type="button"
                 onClick={openSaveModal}
-                className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-teal-900/20 transition-colors hover:bg-teal-700 touch-manipulation sm:w-auto"
+                className="inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-3 text-base font-bold text-white shadow-md shadow-teal-900/20 transition-colors hover:bg-teal-700 touch-manipulation sm:w-auto"
               >
-                <Save className="h-4 w-4 shrink-0" />
+                <Save className="h-5 w-5 shrink-0" aria-hidden />
                 <span>حفظ في السجل</span>
               </button>
               <button
                 type="button"
                 onClick={handleNewBlankTable}
-                className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-amber-200/90 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-950 transition-colors hover:bg-amber-100 touch-manipulation sm:w-auto"
+                className="inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl border border-amber-200/90 bg-amber-50 px-5 py-3 text-base font-bold text-amber-950 transition-colors hover:bg-amber-100 touch-manipulation sm:w-auto"
               >
                 <FilePlus2 className="h-4 w-4 shrink-0 text-amber-700" />
                 <span>جدول جديد</span>
@@ -1723,27 +1726,27 @@ export default function App() {
         </div>
 
         {/* Settings & Subjects Section */}
-        <section className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] ring-1 ring-stone-200/40 sm:p-6 print:hidden">
-          <div className="mb-5 flex flex-col gap-4 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+        <section className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] ring-1 ring-stone-200/40 sm:p-6 print:hidden">
+          <div className="mb-6 flex flex-col gap-4 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-teal-700 ring-1 ring-stone-200/80">
-                <Settings className="h-6 w-6 sm:h-7 sm:w-7" strokeWidth={2} />
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-teal-700 ring-1 ring-stone-200/80">
+                <Settings className="h-7 w-7 sm:h-7 sm:w-7" strokeWidth={2} aria-hidden />
               </span>
               <h2 className="text-xl font-extrabold leading-tight text-stone-900 sm:text-2xl">
                 إدارة المواد والمعلمين
               </h2>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:gap-3 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:gap-3 w-full sm:w-auto">
               <button
                 type="button"
                 onClick={handleExportSubjects}
-                className="flex w-full sm:w-auto items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-stone-50 text-stone-700 hover:bg-teal-50 rounded-xl font-medium transition-colors touch-manipulation"
+                className="flex w-full sm:w-auto items-center justify-center gap-2 px-5 py-3 min-h-[52px] text-base bg-stone-50 text-stone-700 hover:bg-teal-50 rounded-xl font-semibold transition-colors touch-manipulation"
               >
-                <Download className="h-4 w-4 shrink-0" />
+                <Download className="h-5 w-5 shrink-0" aria-hidden />
                 <span>تصدير</span>
               </button>
-              <label className="flex w-full sm:w-auto items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-stone-50 text-stone-700 hover:bg-teal-50 rounded-xl font-medium transition-colors cursor-pointer touch-manipulation">
-                <Upload className="h-4 w-4 shrink-0" />
+              <label className="flex w-full sm:w-auto items-center justify-center gap-2 px-5 py-3 min-h-[52px] text-base bg-stone-50 text-stone-700 hover:bg-teal-50 rounded-xl font-semibold transition-colors cursor-pointer touch-manipulation">
+                <Upload className="h-5 w-5 shrink-0" aria-hidden />
                 <span>استيراد</span>
                 <input
                   type="file"
@@ -1756,16 +1759,16 @@ export default function App() {
             </div>
           </div>
           
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-10">
             {/* Teachers */}
-            <div className="lg:col-span-1 rounded-2xl border border-stone-200/80 border-l-4 border-l-teal-600 bg-gradient-to-br from-stone-50 to-white p-5 shadow-sm">
-              <h3 className="mb-5 flex items-center space-x-2 space-x-reverse text-lg font-bold text-stone-900">
-                <Users className="h-5 w-5 text-teal-600" />
+            <div className="lg:col-span-1 rounded-2xl border border-stone-200/80 border-l-4 border-l-teal-600 bg-gradient-to-br from-stone-50 to-white p-5 sm:p-6 shadow-sm">
+              <h3 className="mb-5 flex items-center space-x-2 space-x-reverse text-lg sm:text-xl font-bold text-stone-900">
+                <Users className="h-6 w-6 text-teal-600 shrink-0" aria-hidden />
                 <span>{editingTeacherId ? 'تعديل معلم' : 'المعلمون'}</span>
               </h3>
               <form onSubmit={handleSaveTeacher} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-bold text-stone-800 mb-1.5">اسم المعلم</label>
+                  <label className="block text-base font-bold text-stone-800 mb-2">اسم المعلم</label>
                   <input
                     type="text"
                     value={newTeacherName}
@@ -1773,7 +1776,7 @@ export default function App() {
                       setNewTeacherName(e.target.value);
                       setTeacherNameError('');
                     }}
-                    className={`w-full rounded-xl px-4 py-2.5 shadow-sm outline-none transition-all focus:ring-2 focus:ring-teal-500 focus:border-teal-500 ${
+                    className={`w-full min-h-[48px] rounded-xl px-4 py-3 text-base shadow-sm outline-none transition-all focus:ring-2 focus:ring-teal-500 focus:border-teal-500 ${
                       teacherNameError
                         ? 'border border-red-300 ring-1 ring-red-200/80'
                         : 'border border-stone-200'
@@ -1784,24 +1787,24 @@ export default function App() {
                     aria-describedby={teacherNameError ? 'teacher-name-error' : undefined}
                   />
                   {teacherNameError ? (
-                    <p id="teacher-name-error" className="mt-1.5 text-sm font-medium text-red-600" role="alert">
+                    <p id="teacher-name-error" className="mt-2 text-base font-medium text-red-600" role="alert">
                       {teacherNameError}
                     </p>
                   ) : null}
                 </div>
-                <div className="flex space-x-3 space-x-reverse pt-2">
+                <div className="flex flex-col gap-3 sm:flex-row sm:gap-3 sm:space-x-3 sm:space-x-reverse pt-2">
                   <button
                     type="submit"
-                    className="flex-1 flex justify-center items-center space-x-2 space-x-reverse bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-xl transition-colors font-bold shadow-sm shadow-teal-900/15"
+                    className="flex-1 flex justify-center items-center min-h-[52px] space-x-2 space-x-reverse bg-teal-600 hover:bg-teal-700 text-white px-4 py-3 rounded-xl transition-colors text-base font-bold shadow-sm shadow-teal-900/15 touch-manipulation"
                   >
-                    {editingTeacherId ? <Check className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+                    {editingTeacherId ? <Check className="h-5 w-5" aria-hidden /> : <Plus className="h-5 w-5" aria-hidden />}
                     <span>{editingTeacherId ? 'حفظ' : 'إضافة معلم'}</span>
                   </button>
                   {editingTeacherId && (
                     <button
                       type="button"
                       onClick={handleCancelEditTeacher}
-                      className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 font-bold text-stone-700 shadow-sm transition-colors hover:bg-stone-50"
+                      className="rounded-xl border border-stone-200 bg-white px-5 py-3 min-h-[52px] font-bold text-stone-700 text-base shadow-sm transition-colors hover:bg-stone-50 touch-manipulation"
                     >
                       إلغاء
                     </button>
@@ -1809,29 +1812,29 @@ export default function App() {
                 </div>
               </form>
               {teachers.length > 0 && (
-                <ul className="mt-5 space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                <ul className="mt-5 space-y-3 max-h-[min(320px,50vh)] overflow-y-auto pr-1">
                   {teachers.map((t) => (
                     <li
                       key={t.id}
-                      className="flex items-center justify-between gap-2 bg-white p-3 rounded-xl border border-stone-200/80 shadow-sm"
+                      className="flex items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-xl border border-stone-200/80 shadow-sm"
                     >
-                      <span className="font-medium text-stone-900 truncate">{t.name}</span>
+                      <span className="font-medium text-stone-900 text-base truncate min-w-0">{t.name}</span>
                       <div className="flex shrink-0 space-x-1 space-x-reverse">
                         <button
                           type="button"
                           onClick={() => handleEditTeacher(t)}
-                          className="rounded-lg p-2 text-teal-600 transition-colors hover:bg-teal-50"
-                          title="تعديل"
+                          className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl text-teal-600 transition-colors hover:bg-teal-50 touch-manipulation"
+                          aria-label={`تعديل ${t.name}`}
                         >
-                          <Edit2 className="h-4 w-4" />
+                          <Edit2 className="h-5 w-5" aria-hidden />
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDeleteTeacher(t)}
-                          className="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
-                          title="حذف"
+                          className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl text-red-600 transition-colors hover:bg-red-50 touch-manipulation"
+                          aria-label={`حذف ${t.name}`}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-5 w-5" aria-hidden />
                         </button>
                       </div>
                     </li>
@@ -1841,13 +1844,13 @@ export default function App() {
             </div>
 
             {/* Add/Edit Subject Form */}
-            <div className="lg:col-span-1 rounded-2xl border border-stone-200/80 bg-stone-50/90 p-5 shadow-sm ring-1 ring-stone-100">
-              <h3 className="mb-5 text-lg font-bold text-stone-900">
+            <div className="lg:col-span-1 rounded-2xl border border-stone-200/80 bg-stone-50/90 p-5 sm:p-6 shadow-sm ring-1 ring-stone-100">
+              <h3 className="mb-5 text-lg sm:text-xl font-bold text-stone-900">
                 {editingSubjectId ? 'تعديل المادة' : 'إضافة مادة جديدة'}
               </h3>
               <form onSubmit={handleSaveSubject} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-bold text-stone-800 mb-1.5">المادة (مثال: رياضيات)</label>
+                  <label className="block text-base font-bold text-stone-800 mb-2">المادة (مثال: رياضيات)</label>
                   <input
                     type="text"
                     value={newSubject}
@@ -1855,7 +1858,7 @@ export default function App() {
                       setNewSubject(e.target.value);
                       setSubjectPairError('');
                     }}
-                    className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all shadow-sm ${
+                    className={`w-full min-h-[48px] px-4 py-3 text-base border rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all shadow-sm ${
                       subjectPairError ? 'border-red-300 ring-1 ring-red-200/80' : 'border-stone-200'
                     }`}
                     placeholder="اسم المادة"
@@ -1864,20 +1867,20 @@ export default function App() {
                     aria-describedby={subjectPairError ? 'subject-pair-error' : undefined}
                   />
                   {subjectPairError ? (
-                    <p id="subject-pair-error" className="mt-1.5 text-sm font-medium text-red-600" role="alert">
+                    <p id="subject-pair-error" className="mt-2 text-base font-medium text-red-600" role="alert">
                       {subjectPairError}
                     </p>
                   ) : null}
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-stone-800 mb-1.5">المعلم (اختياري)</label>
+                  <label className="block text-base font-bold text-stone-800 mb-2">المعلم (اختياري)</label>
                   <select
                     value={selectedTeacherId}
                     onChange={(e) => {
                       setSelectedTeacherId(e.target.value);
                       setSubjectPairError('');
                     }}
-                    className="w-full px-4 py-2.5 border border-stone-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all shadow-sm bg-white text-stone-900"
+                    className="w-full min-h-[48px] px-4 py-3 text-base border border-stone-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all shadow-sm bg-white text-stone-900"
                   >
                     <option value="">— بدون معلم —</option>
                     {teachers.map((t) => (
@@ -1887,22 +1890,22 @@ export default function App() {
                     ))}
                   </select>
                   {teachers.length === 0 && (
-                    <p className="text-xs text-stone-600 mt-2">أضف معلماً من قسم «المعلمون» أولاً لربطه بالمادة.</p>
+                    <p className="text-sm text-stone-600 mt-2 leading-relaxed">أضف معلماً من قسم «المعلمون» أولاً لربطه بالمادة.</p>
                   )}
                 </div>
-                <div className="flex space-x-3 space-x-reverse pt-2">
+                <div className="flex flex-col gap-3 sm:flex-row sm:gap-3 sm:space-x-3 sm:space-x-reverse pt-2">
                   <button
                     type="submit"
-                    className="flex-1 flex justify-center items-center space-x-2 space-x-reverse bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-xl transition-colors font-bold shadow-sm shadow-teal-900/15"
+                    className="flex-1 flex justify-center items-center min-h-[52px] space-x-2 space-x-reverse bg-teal-600 hover:bg-teal-700 text-white px-4 py-3 rounded-xl transition-colors text-base font-bold shadow-sm shadow-teal-900/15 touch-manipulation"
                   >
-                    {editingSubjectId ? <Check className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+                    {editingSubjectId ? <Check className="h-5 w-5" aria-hidden /> : <Plus className="h-5 w-5" aria-hidden />}
                     <span>{editingSubjectId ? 'حفظ التعديلات' : 'إضافة للقائمة'}</span>
                   </button>
                   {editingSubjectId && (
                     <button
                       type="button"
                       onClick={handleCancelEdit}
-                      className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 font-bold text-stone-700 shadow-sm transition-colors hover:bg-stone-50"
+                      className="rounded-xl border border-stone-200 bg-white px-5 py-3 min-h-[52px] text-base font-bold text-stone-700 shadow-sm transition-colors hover:bg-stone-50 touch-manipulation"
                     >
                       إلغاء
                     </button>
@@ -1913,36 +1916,38 @@ export default function App() {
 
             {/* Subjects List */}
             <div className="lg:col-span-1">
-              <h3 className="text-lg font-bold mb-5 text-stone-900 flex items-center space-x-2 space-x-reverse">
-                <BookOpen className="h-5 w-5 text-stone-500" />
+              <h3 className="text-lg sm:text-xl font-bold mb-5 text-stone-900 flex items-center space-x-2 space-x-reverse gap-2">
+                <BookOpen className="h-6 w-6 text-stone-500 shrink-0" aria-hidden />
                 <span>المواد المضافة ({subjects.length})</span>
               </h3>
               {subjects.length === 0 ? (
-                <div className="text-center py-12 bg-stone-50/90 rounded-2xl border-2 border-dashed border-stone-200 text-stone-400 font-medium">
+                <div className="text-center py-12 px-4 bg-stone-50/90 rounded-2xl border-2 border-dashed border-stone-200 text-stone-500 font-medium text-base leading-relaxed">
                   لم يتم إضافة أي مواد بعد. استخدم النموذج لإضافة المواد.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-3 max-h-[380px] overflow-y-auto p-2">
+                <div className="grid grid-cols-1 gap-3 max-h-[min(380px,55vh)] overflow-y-auto p-1">
                   {subjects.map((subject) => (
-                    <div key={subject.id} className="flex flex-col bg-white p-4 rounded-xl border border-stone-200/80 shadow-sm hover:shadow-md transition-shadow">
-                      <div className="font-bold text-stone-900 text-lg">{subject.name}</div>
-                      <div className="text-sm text-stone-500 mb-4">
+                    <div key={subject.id} className="flex flex-col bg-white p-4 sm:p-5 rounded-xl border border-stone-200/80 shadow-sm hover:shadow-md transition-shadow">
+                      <div className="font-bold text-stone-900 text-lg leading-snug">{subject.name}</div>
+                      <div className="text-base text-stone-600 mb-4 mt-1">
                         {subject.teacherId ? teacherNameById(subject.teacherId) || '(معلم محذوف)' : 'بدون معلم'}
                       </div>
-                      <div className="flex justify-end space-x-2 space-x-reverse mt-auto pt-3 border-t border-stone-100">
+                      <div className="flex justify-end gap-2 mt-auto pt-3 border-t border-stone-100">
                         <button 
+                          type="button"
                           onClick={() => handleEditSubject(subject)} 
-                          className="rounded-lg p-2 text-teal-600 transition-colors hover:bg-teal-50"
-                          title="تعديل"
+                          className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl text-teal-600 transition-colors hover:bg-teal-50 touch-manipulation"
+                          aria-label={`تعديل مادة ${subject.name}`}
                         >
-                          <Edit2 className="h-4 w-4" />
+                          <Edit2 className="h-5 w-5" aria-hidden />
                         </button>
                         <button 
+                          type="button"
                           onClick={() => handleDeleteSubject(subject)} 
-                          className="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
-                          title="حذف"
+                          className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl text-red-600 transition-colors hover:bg-red-50 touch-manipulation"
+                          aria-label={`حذف مادة ${subject.name}`}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-5 w-5" aria-hidden />
                         </button>
                       </div>
                     </div>
@@ -1956,13 +1961,13 @@ export default function App() {
         {/* Schedule Section */}
         <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] ring-1 ring-stone-200/40">
           {/* Controls */}
-          <div className="border-b border-stone-200/80 bg-gradient-to-b from-stone-50 to-stone-50/50 p-4 print:hidden sm:p-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
-              <div className="flex w-full flex-1 min-w-0 flex-col gap-3">
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 bg-white p-3 rounded-xl border border-stone-200/80 shadow-sm">
+          <div className="border-b border-stone-200/80 bg-gradient-to-b from-stone-50 to-stone-50/50 p-5 print:hidden sm:p-6">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+              <div className="flex w-full flex-1 min-w-0 flex-col gap-4">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-3 bg-white p-4 rounded-xl border border-stone-200/80 shadow-sm">
                   <label
                     htmlFor="school-name"
-                    className="text-xs sm:text-sm font-bold text-stone-900 whitespace-nowrap px-1 sm:px-2 shrink-0"
+                    className="text-sm sm:text-base font-bold text-stone-900 whitespace-nowrap px-1 shrink-0"
                   >
                     اسم المدرسة:
                   </label>
@@ -1975,13 +1980,13 @@ export default function App() {
                       setSchoolName(e.target.value);
                     }}
                     placeholder="يظهر أعلى الجدول وفي صورة PNG"
-                    className="w-full min-w-0 min-h-[44px] rounded-lg border border-stone-200 bg-stone-50/90 px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none text-stone-900 font-medium"
+                    className="w-full min-w-0 min-h-[48px] rounded-lg border border-stone-200 bg-stone-50/90 px-4 py-3 text-base focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none text-stone-900 font-medium"
                   />
                 </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 bg-white p-3 rounded-xl border border-stone-200/80 shadow-sm">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-3 bg-white p-4 rounded-xl border border-stone-200/80 shadow-sm">
                   <label
                     htmlFor="schedule-date"
-                    className="text-xs sm:text-sm font-bold text-stone-900 whitespace-nowrap px-1 sm:px-2 shrink-0"
+                    className="text-sm sm:text-base font-bold text-stone-900 whitespace-nowrap px-1 shrink-0"
                   >
                     تاريخ الجدول:
                   </label>
@@ -1993,9 +1998,9 @@ export default function App() {
                       pushDebouncedUndoGroup();
                       setScheduleDate(e.target.value);
                     }}
-                    className="w-full min-w-0 min-h-[44px] border-none bg-stone-50/90 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none text-stone-900 font-medium"
+                    className="w-full min-w-0 min-h-[48px] border-none bg-stone-50/90 rounded-lg px-4 py-3 text-base focus:ring-2 focus:ring-teal-500 outline-none text-stone-900 font-medium"
                   />
-                  <p className="text-xs text-stone-600 sm:mr-2 sm:mt-0 mt-1 leading-snug">
+                  <p className="text-sm sm:text-base text-stone-600 sm:mr-2 sm:mt-0 mt-1 leading-relaxed">
                     يوم العرض: <span className="font-bold text-stone-800">{selectedDay}</span> (يُستخرج من التاريخ)
                   </p>
                 </div>
@@ -2003,72 +2008,83 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleDownloadImage}
-                className="inline-flex min-h-[48px] w-full lg:w-auto shrink-0 items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 sm:px-5 py-2.5 font-bold text-white shadow-md shadow-teal-900/20 transition-colors hover:bg-teal-700 touch-manipulation"
+                className="inline-flex min-h-[52px] w-full lg:w-auto shrink-0 items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 sm:px-6 py-3 text-base font-bold text-white shadow-md shadow-teal-900/20 transition-colors hover:bg-teal-700 touch-manipulation"
               >
-                <ImageIcon className="h-5 w-5 shrink-0 opacity-95" />
+                <ImageIcon className="h-6 w-6 shrink-0 opacity-95" aria-hidden />
                 <span>تحميل الجدول كصورة PNG</span>
               </button>
             </div>
-            <p className="mt-3 text-center text-xs text-stone-500 leading-relaxed print:hidden">
-              تحديد عدة خلايا: اسحب من خلية إلى أخرى، أو انقر خلية ثم{' '}
-              <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
-                Shift
-              </kbd>
-              +نقر لتوسيع المستطيل. النسخ/اللصق: ركّز الخلية التي يبدأ منها اللصق ثم{' '}
-              <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
-                ⌘C
-              </kbd>
-              /
-              <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
-                Ctrl+C
-              </kbd>
-              {' '}و
-              <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
-                ⌘V
-              </kbd>
-              /
-              <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
-                Ctrl+V
-              </kbd>
-              . التراجع / الإعادة خارج حقول النص:{' '}
-              <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
-                ⌘Z
-              </kbd>
-              /
-              <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
-                Ctrl+Z
-              </kbd>
-              {' '}و
-              <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
-                ⇧⌘Z
-              </kbd>
-              /
-              <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
-                Ctrl+Shift+Z
-              </kbd>
-              .{' '}
-              <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-700">
-                Esc
-              </kbd>
-              يلغي التحديد المتعدد.
+            <p className="mt-4 text-center text-sm text-stone-600 leading-relaxed print:hidden sm:hidden">
+              للتمرير أفقياً على الجدول، مرّر بإصبعك يميناً ويساراً داخل المنطقة المخطّطة.
             </p>
+            <details className="mt-4 print:hidden group rounded-xl border border-stone-200/90 bg-white/80 px-4 py-3 text-stone-700 shadow-sm open:shadow-md">
+              <summary className="cursor-pointer list-none text-base font-bold text-stone-800 outline-none select-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-2 touch-manipulation min-h-[48px] py-1">
+                <span>مساعدة: لوحة المفاتيح والتحديد</span>
+                <span className="text-stone-400 text-sm font-normal group-open:rotate-180 transition-transform" aria-hidden>
+                  ▼
+                </span>
+              </summary>
+              <p className="mt-3 text-sm sm:text-base text-stone-600 leading-relaxed border-t border-stone-100 pt-3">
+                تحديد عدة خلايا: اسحب من خلية إلى أخرى، أو انقر خلية ثم{' '}
+                <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-xs text-stone-700">
+                  Shift
+                </kbd>
+                +نقر لتوسيع المستطيل. النسخ/اللصق: ركّز الخلية التي يبدأ منها اللصق ثم{' '}
+                <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-xs text-stone-700">
+                  ⌘C
+                </kbd>
+                /
+                <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-xs text-stone-700">
+                  Ctrl+C
+                </kbd>
+                {' '}و
+                <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-xs text-stone-700">
+                  ⌘V
+                </kbd>
+                /
+                <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-xs text-stone-700">
+                  Ctrl+V
+                </kbd>
+                . التراجع / الإعادة خارج حقول النص:{' '}
+                <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-xs text-stone-700">
+                  ⌘Z
+                </kbd>
+                /
+                <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-xs text-stone-700">
+                  Ctrl+Z
+                </kbd>
+                {' '}و
+                <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-xs text-stone-700">
+                  ⇧⌘Z
+                </kbd>
+                /
+                <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-xs text-stone-700">
+                  Ctrl+Shift+Z
+                </kbd>
+                .{' '}
+                <kbd className="rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-xs text-stone-700">
+                  Esc
+                </kbd>
+                يلغي التحديد المتعدد.
+              </p>
+            </details>
           </div>
 
           {/* Table Container for Image Export */}
-          <div className="schedule-scroll overflow-x-auto overflow-y-visible bg-white touch-pan-x">
+          <div className="schedule-scroll overflow-x-auto overflow-y-visible bg-white touch-pan-x scroll-smooth">
             <div ref={tableRef} className="min-w-max p-4 sm:p-8 bg-white">
               {/* Header for Image/Print */}
-              <div className="text-center mb-4 sm:mb-8 px-1">
+              <div className="text-center mb-5 sm:mb-8 px-2">
                 {schoolName.trim() ? (
-                  <p className="text-lg sm:text-2xl font-extrabold text-stone-900 mb-2 sm:mb-3 leading-tight tracking-tight">
+                  <p className="text-xl sm:text-2xl font-extrabold text-stone-900 mb-2 sm:mb-3 leading-tight tracking-tight">
                     {schoolName.trim()}
                   </p>
                 ) : null}
-                <h2 className="text-xl sm:text-3xl font-bold text-stone-900 mb-1 sm:mb-2 leading-snug">
+                <h2 className="text-2xl sm:text-3xl font-bold text-stone-900 mb-2 sm:mb-2 leading-snug">
                   الجدول المدرسي - {selectedDay}
                 </h2>
                 {scheduleDate ? (
-                  <h3 className="text-base font-semibold text-teal-700 sm:text-xl">
+                  <h3 className="text-lg font-semibold text-teal-700 sm:text-xl">
                     {formatISODateArabicLong(scheduleDate)}
                   </h3>
                 ) : null}
@@ -2077,21 +2093,21 @@ export default function App() {
               <table
                 role="grid"
                 aria-label={`جدول الحصص — ${selectedDay}`}
-                className="w-full select-none text-right border-separate border-spacing-0 text-sm sm:text-base"
+                className="w-full select-none text-right border-separate border-spacing-0 text-base sm:text-base"
               >
                 <thead>
                   <tr className="border-b-2 border-stone-200 bg-stone-100 text-stone-900">
-                    <th className="sticky right-0 z-30 w-24 border-l border-stone-200 bg-stone-100 p-2 text-center text-sm font-bold shadow-[inset_-6px_0_8px_-6px_rgba(0,0,0,0.06)] sm:p-4 sm:text-lg">
+                    <th className="sticky right-0 z-30 w-[5.75rem] min-w-[5.75rem] border-l border-stone-200 bg-stone-100 p-2.5 text-center text-sm sm:text-base font-bold shadow-[inset_-6px_0_8px_-6px_rgba(0,0,0,0.06)] sm:w-24 sm:min-w-[6rem] sm:p-4 sm:text-lg">
                       الحصة
                     </th>
-                    <th className="sticky right-24 z-20 w-[7.5rem] min-w-[7.5rem] sm:w-40 sm:min-w-[10rem] border-l border-stone-200 bg-stone-100 p-2 text-center text-sm font-bold shadow-[inset_-6px_0_8px_-6px_rgba(0,0,0,0.06)] sm:p-4 sm:text-lg">
+                    <th className="sticky right-[5.75rem] sm:right-24 z-20 w-[8.25rem] min-w-[8.25rem] sm:w-40 sm:min-w-[10rem] border-l border-stone-200 bg-stone-100 p-2.5 text-center text-sm sm:text-base font-bold shadow-[inset_-6px_0_8px_-6px_rgba(0,0,0,0.06)] sm:p-4 sm:text-lg">
                       التوقيت
                     </th>
                     {ALL_GRADES.map((grade) => (
                       <th
                         key={grade}
                         data-export-grade={grade}
-                        className="p-2 sm:p-4 font-bold text-xs sm:text-base border-l border-stone-200 text-center min-w-[68px] sm:min-w-[90px]"
+                        className="p-2.5 sm:p-4 font-bold text-sm sm:text-base border-l border-stone-200 text-center min-w-[5.5rem] sm:min-w-[5.75rem] md:min-w-[90px]"
                       >
                         {grade}
                       </th>
@@ -2110,36 +2126,36 @@ export default function App() {
                       data-export-period={period}
                       className={`border-b border-stone-200/80 hover:bg-stone-50/90 transition-colors ${rowBg}`}
                     >
-                      <td className="sticky right-0 z-20 p-2 sm:p-4 font-bold text-xs sm:text-base text-stone-800 border-l border-stone-200/80 text-center bg-stone-100 shadow-[inset_-6px_0_8px_-6px_rgba(0,0,0,0.06)]">
+                      <td className="sticky right-0 z-20 w-[5.75rem] min-w-[5.75rem] sm:w-24 p-2.5 sm:p-4 font-bold text-sm sm:text-base text-stone-800 border-l border-stone-200/80 text-center bg-stone-100 shadow-[inset_-6px_0_8px_-6px_rgba(0,0,0,0.06)]">
                         {period}
                       </td>
                       <td
-                        className={`sticky right-24 z-10 p-1.5 sm:p-2 border-l border-stone-200/80 text-center align-middle shadow-[inset_-6px_0_8px_-6px_rgba(0,0,0,0.06)] ${timeBg}`}
+                        className={`sticky right-[5.75rem] sm:right-24 z-10 w-[8.25rem] min-w-[8.25rem] sm:w-40 p-2 sm:p-2 border-l border-stone-200/80 text-center align-middle shadow-[inset_-6px_0_8px_-6px_rgba(0,0,0,0.06)] ${timeBg}`}
                       >
-                        <div className="flex flex-col items-stretch justify-center gap-1 sm:gap-1.5">
+                        <div className="flex flex-col items-stretch justify-center gap-1.5 sm:gap-1.5">
                           <div className="flex items-center gap-1 justify-center print:hidden">
-                            <Clock className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-stone-400 shrink-0" aria-hidden />
-                            <span className="text-[10px] sm:text-xs font-bold text-stone-500 whitespace-nowrap">من</span>
+                            <Clock className="h-4 w-4 sm:h-3.5 sm:w-3.5 text-stone-400 shrink-0" aria-hidden />
+                            <span className="text-xs sm:text-xs font-bold text-stone-500 whitespace-nowrap">من</span>
                             <input
                               type="time"
                               step={60}
                               lang="en-GB"
                               value={timeSlot.start}
                               onChange={(e) => handlePeriodTimeChange(period, 'start', e.target.value)}
-                              className="time-input-24h min-w-0 w-[4.75rem] sm:w-[5.25rem] select-text rounded-md border-0 bg-transparent py-0.5 text-center text-[11px] sm:text-sm font-bold text-stone-800 outline-none focus:ring-2 focus:ring-teal-400 [color-scheme:light]"
+                              className="time-input-24h min-w-0 w-[5rem] sm:w-[5.25rem] min-h-[40px] select-text rounded-md border-0 bg-transparent py-1 text-center text-sm sm:text-sm font-bold text-stone-800 outline-none focus:ring-2 focus:ring-teal-400 [color-scheme:light]"
                               aria-label={`بداية الحصة ${period}`}
                             />
                           </div>
                           <div className="flex items-center gap-1 justify-center print:hidden">
-                            <span className="w-3 sm:w-3.5 shrink-0" aria-hidden />
-                            <span className="text-[10px] sm:text-xs font-bold text-stone-500 whitespace-nowrap">إلى</span>
+                            <span className="w-4 sm:w-3.5 shrink-0" aria-hidden />
+                            <span className="text-xs sm:text-xs font-bold text-stone-500 whitespace-nowrap">إلى</span>
                             <input
                               type="time"
                               step={60}
                               lang="en-GB"
                               value={timeSlot.end}
                               onChange={(e) => handlePeriodTimeChange(period, 'end', e.target.value)}
-                              className="time-input-24h min-w-0 w-[4.75rem] sm:w-[5.25rem] select-text rounded-md border-0 bg-transparent py-0.5 text-center text-[11px] sm:text-sm font-bold text-stone-800 outline-none focus:ring-2 focus:ring-teal-400 [color-scheme:light]"
+                              className="time-input-24h min-w-0 w-[5rem] sm:w-[5.25rem] min-h-[40px] select-text rounded-md border-0 bg-transparent py-1 text-center text-sm sm:text-sm font-bold text-stone-800 outline-none focus:ring-2 focus:ring-teal-400 [color-scheme:light]"
                               aria-label={`نهاية الحصة ${period}`}
                             />
                           </div>
@@ -2217,7 +2233,7 @@ export default function App() {
                               focusScheduleCell(period, grade);
                               openCellEditor(selectedDay, period, grade);
                             }}
-                            className={`p-1.5 sm:p-3 border-l border-stone-200/80 text-center cursor-pointer transition-colors group relative touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white ${
+                            className={`p-2 sm:p-3 border-l border-stone-200/80 text-center cursor-pointer transition-colors group relative touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white active:bg-stone-100/80 ${
                               inRangeSelection
                                 ? hasTeacherCollision
                                   ? 'bg-red-100/55 ring-1 ring-inset ring-red-400/85 hover:bg-red-50/90 focus-visible:ring-red-500'
@@ -2228,7 +2244,7 @@ export default function App() {
                             }`}
                           >
                             <div
-                              className={`min-h-[2.75rem] sm:min-h-[3.5rem] flex items-center justify-center rounded-lg sm:rounded-xl p-1.5 sm:p-2 transition-all text-xs sm:text-sm leading-snug ${
+                              className={`min-h-[3.5rem] sm:min-h-[3.5rem] flex items-center justify-center rounded-lg sm:rounded-xl p-2 sm:p-2.5 transition-all text-sm sm:text-base leading-snug ${
                                 displayValue
                                   ? hasTeacherCollision
                                     ? 'bg-red-100/95 text-stone-900 font-bold border border-red-400 shadow-sm'
@@ -2237,7 +2253,7 @@ export default function App() {
                               }`}
                             >
                               {displayValue || (
-                                <span className="print:hidden text-[11px] sm:text-sm">انقر أو اكتب للإضافة</span>
+                                <span className="print:hidden text-xs sm:text-sm text-stone-400">انقر أو اكتب للإضافة</span>
                               )}
                               {displayValue ? null : <span className="hidden print:inline">—</span>}
                             </div>
@@ -2258,19 +2274,19 @@ export default function App() {
       </main>
 
       <footer className="print:hidden border-t border-stone-200/90 bg-stone-100/80 mt-auto">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-5 text-center">
-          <p className="text-xs sm:text-sm text-stone-600 leading-relaxed">{NAQSH_TECH_ATTRIBUTION_AR}</p>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 text-center">
+          <p className="text-sm sm:text-base text-stone-600 leading-relaxed">{NAQSH_TECH_ATTRIBUTION_AR}</p>
         </div>
       </footer>
 
       {/* Cell Editor Modal */}
       {editingCell && (
-        <div className="fixed inset-0 bg-stone-950/55 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 print:hidden">
+        <div className="fixed inset-0 bg-stone-950/55 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-4 print:hidden">
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="cell-picker-title"
-            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[92dvh] sm:max-h-[90vh] transform transition-all outline-none"
+            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[min(92dvh,100svh)] sm:max-h-[90vh] transform transition-all outline-none"
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
                 e.stopPropagation();
@@ -2279,22 +2295,22 @@ export default function App() {
             }}
           >
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-stone-800 to-teal-900 text-white p-4 sm:p-6 flex flex-row gap-3 justify-between items-start">
-              <div className="min-w-0 flex-1">
-                <h3 id="cell-picker-title" className="text-lg sm:text-2xl font-bold leading-snug">
+            <div className="bg-gradient-to-r from-stone-800 to-teal-900 text-white p-5 sm:p-6 flex flex-row gap-3 justify-between items-start">
+              <div className="min-w-0 flex-1 pr-2">
+                <h3 id="cell-picker-title" className="text-xl sm:text-2xl font-bold leading-snug">
                   اختيار المادة
                 </h3>
                 <div
-                  className="mt-3 flex flex-wrap items-center gap-2 text-[11px] sm:text-xs"
+                  className="mt-3 flex flex-wrap items-center gap-2 text-xs sm:text-sm"
                   aria-label={`${editingCell.day}، الحصة ${editingCell.period}، الصف ${editingCell.grade}`}
                 >
-                  <span className="rounded-lg bg-white/10 px-2 py-1 font-semibold text-white/95 ring-1 ring-white/15">
+                  <span className="rounded-lg bg-white/10 px-2.5 py-1.5 font-semibold text-white/95 ring-1 ring-white/15">
                     {editingCell.day}
                   </span>
-                  <span className="rounded-lg bg-white/10 px-2 py-1 text-white/90 ring-1 ring-white/15">
+                  <span className="rounded-lg bg-white/10 px-2.5 py-1.5 text-white/90 ring-1 ring-white/15">
                     الحصة {editingCell.period}
                   </span>
-                  <span className="rounded-lg bg-white/10 px-2 py-1 text-white/90 ring-1 ring-white/15">
+                  <span className="rounded-lg bg-white/10 px-2.5 py-1.5 text-white/90 ring-1 ring-white/15">
                     الصف {editingCell.grade}
                   </span>
                 </div>
@@ -2302,15 +2318,15 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setEditingCell(null)}
-                className="text-stone-200 hover:text-white hover:bg-white/20 p-2 rounded-full transition-colors shrink-0 touch-manipulation"
+                className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center text-stone-200 hover:text-white hover:bg-white/20 rounded-full transition-colors shrink-0 touch-manipulation"
                 aria-label="إغلاق"
               >
-                <X className="h-7 w-7" />
+                <X className="h-8 w-8" aria-hidden />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="min-h-0 flex-1 overflow-y-auto bg-stone-50/90 p-4 sm:p-6">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-stone-50/90 p-5 sm:p-6 overscroll-contain">
               <div className="space-y-4">
                 {subjects.length === 0 ? (
                   <div className="flex items-start gap-3 rounded-2xl border border-teal-100 bg-teal-50/80 p-4 text-sm text-teal-950">
@@ -2322,7 +2338,7 @@ export default function App() {
                   </div>
                 ) : null}
                 <div>
-                  <label htmlFor="cell-subject-search" className="block text-sm font-bold text-stone-800 mb-1.5">
+                  <label htmlFor="cell-subject-search" className="block text-base font-bold text-stone-800 mb-2">
                     بحث سريع (لوحة المفاتيح)
                   </label>
                   <input
@@ -2372,18 +2388,18 @@ export default function App() {
                       }
                     }}
                     placeholder="مادة، أو مادة ثم معلم (مثال: عربي رحمة)"
-                    className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-stone-900 shadow-sm outline-none transition-all focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                    className="w-full min-h-[52px] rounded-xl border border-stone-200 bg-white px-4 py-3 text-base text-stone-900 shadow-sm outline-none transition-all focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
                     autoComplete="off"
                     aria-describedby="cell-subject-kbd-hint"
                   />
-                  <p id="cell-subject-kbd-hint" className="mt-2 text-xs text-stone-500 leading-relaxed">
+                  <p id="cell-subject-kbd-hint" className="mt-2 text-sm text-stone-600 leading-relaxed">
                     كلمة واحدة: تبحث في اسم المادة أو المعلم. كلمتان أو أكثر: الأولى للمادة والباقي للمعلم
                     (مثال: عربي رحمة). عند عدم وجود نتائج يمكنك إضافة مادة ومعلم جديدين من الصندوق التالي. الأسهم
                     ↑↓ و Enter و Home / End و Esc كما سبق.
                   </p>
                 </div>
                 {filteredCellSubjects.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                     {filteredCellSubjects.map((subject, idx) => {
                       const isSelected =
                         schedule[editingCell.day]?.[editingCell.period]?.[editingCell.grade] === subject.id;
@@ -2395,7 +2411,7 @@ export default function App() {
                           type="button"
                           onClick={() => handleSelectSubject(subject.id)}
                           onMouseEnter={() => setCellSubjectHighlight(idx)}
-                          className={`flex min-h-[88px] flex-col items-center justify-center rounded-2xl border-2 p-3 text-center transition-all touch-manipulation active:scale-[0.98] sm:min-h-[100px] sm:p-4 ${
+                            className={`flex min-h-[96px] flex-col items-center justify-center rounded-2xl border-2 p-4 text-center transition-all touch-manipulation sm:min-h-[100px] sm:p-4 ${
                             isHighlighted
                               ? 'border-teal-600 bg-teal-50 ring-2 ring-teal-400/60 ring-offset-2 ring-offset-stone-50'
                               : isSelected
@@ -2403,9 +2419,9 @@ export default function App() {
                                 : 'border-stone-200/80 bg-white text-stone-700 hover:border-teal-400 hover:bg-teal-50/40 hover:shadow-sm'
                           }`}
                         >
-                          <span className="font-bold text-base sm:text-lg leading-tight">{subject.name}</span>
+                          <span className="font-bold text-lg sm:text-lg leading-tight">{subject.name}</span>
                           {modalTeacher ? (
-                            <span className="text-sm mt-1 opacity-80">{modalTeacher}</span>
+                            <span className="text-base mt-1 opacity-85">{modalTeacher}</span>
                           ) : null}
                         </button>
                       );
@@ -2423,7 +2439,7 @@ export default function App() {
                     </div>
                     <div className="space-y-3">
                       <div>
-                        <label htmlFor="cell-quick-subject" className="block text-sm font-bold text-stone-800 mb-1.5">
+                        <label htmlFor="cell-quick-subject" className="block text-base font-bold text-stone-800 mb-2">
                           اسم المادة
                         </label>
                         <input
@@ -2435,13 +2451,19 @@ export default function App() {
                             setCellQuickAddDirty(true);
                             setCellQuickAddError('');
                           }}
-                          className="w-full rounded-xl border border-stone-200 bg-stone-50/80 px-4 py-3 text-stone-900 shadow-sm outline-none transition-all focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleQuickAddSubjectAndAssign();
+                            }
+                          }}
+                          className="w-full min-h-[52px] rounded-xl border border-stone-200 bg-stone-50/80 px-4 py-3 text-base text-stone-900 shadow-sm outline-none transition-all focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
                           placeholder="مثال: رياضيات"
                           autoComplete="off"
                         />
                       </div>
                       <div>
-                        <label htmlFor="cell-quick-teacher" className="block text-sm font-bold text-stone-800 mb-1.5">
+                        <label htmlFor="cell-quick-teacher" className="block text-base font-bold text-stone-800 mb-2">
                           المعلم (اختياري)
                         </label>
                         <input
@@ -2453,7 +2475,13 @@ export default function App() {
                             setCellQuickAddDirty(true);
                             setCellQuickAddError('');
                           }}
-                          className="w-full rounded-xl border border-stone-200 bg-stone-50/80 px-4 py-3 text-stone-900 shadow-sm outline-none transition-all focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleQuickAddSubjectAndAssign();
+                            }
+                          }}
+                          className="w-full min-h-[52px] rounded-xl border border-stone-200 bg-stone-50/80 px-4 py-3 text-base text-stone-900 shadow-sm outline-none transition-all focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
                           placeholder="يُنشأ معلم جديد إذا لم يكن اسمه مسجّلاً"
                           autoComplete="off"
                         />
@@ -2467,7 +2495,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={handleQuickAddSubjectAndAssign}
-                      className="w-full sm:w-auto inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-3 font-bold text-white shadow-md shadow-teal-900/20 transition-colors hover:bg-teal-700 touch-manipulation"
+                      className="w-full sm:w-auto inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-3 text-base font-bold text-white shadow-md shadow-teal-900/20 transition-colors hover:bg-teal-700 touch-manipulation"
                     >
                       <Plus className="h-5 w-5 shrink-0" />
                       <span>إضافة مادة ووضعها في الجدول</span>
@@ -2478,20 +2506,20 @@ export default function App() {
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-white p-4 sm:p-6 border-t border-stone-200/80 flex flex-col-reverse sm:flex-row sm:justify-between gap-3 sm:gap-0 items-stretch sm:items-center">
+            <div className="bg-white p-5 sm:p-6 border-t border-stone-200/80 flex flex-col-reverse sm:flex-row sm:justify-between gap-3 sm:gap-4 items-stretch sm:items-center pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-6">
               <button
                 type="button"
                 onClick={handleClearCell}
-                className="flex items-center justify-center gap-2 px-4 sm:px-6 py-3 min-h-[48px] bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 rounded-xl font-bold transition-colors touch-manipulation"
+                className="flex items-center justify-center gap-2 px-5 sm:px-6 py-3 min-h-[52px] text-base bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 rounded-xl font-bold transition-colors touch-manipulation"
               >
-                <Trash2 className="h-5 w-5 shrink-0" />
+                <Trash2 className="h-5 w-5 shrink-0" aria-hidden />
                 <span>تفريغ الحصة</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setEditingCell(null)}
-                className="min-h-[48px] rounded-xl bg-stone-100 px-6 py-3 font-bold text-stone-700 transition-colors hover:bg-stone-200 touch-manipulation sm:px-8"
+                className="min-h-[52px] rounded-xl bg-stone-100 px-6 py-3 text-base font-bold text-stone-700 transition-colors hover:bg-stone-200 touch-manipulation sm:px-8"
               >
                 إلغاء
               </button>
@@ -2514,29 +2542,29 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setSaveModalOpen(false)}
-                className="text-stone-200 hover:text-white hover:bg-white/20 p-2 rounded-full transition-colors shrink-0 touch-manipulation"
+                className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center text-stone-200 hover:text-white hover:bg-white/20 rounded-full transition-colors shrink-0 touch-manipulation"
                 aria-label="إغلاق"
               >
-                <X className="h-6 w-6" />
+                <X className="h-7 w-7" aria-hidden />
               </button>
             </div>
-            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto min-h-0">
+            <div className="p-5 sm:p-6 space-y-5 overflow-y-auto min-h-0">
               <div>
-                <label className="block text-sm font-bold text-stone-900 mb-1.5">اسم الجدول</label>
+                <label className="block text-base font-bold text-stone-900 mb-2">اسم الجدول</label>
                 <input
                   type="text"
                   value={saveTableName}
                   onChange={(e) => setSaveTableName(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-stone-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none text-stone-900"
+                  className="w-full min-h-[52px] px-4 py-3 text-base border border-stone-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none text-stone-900"
                   placeholder="مثال: جدول الأسبوع الأول"
                   autoFocus
                 />
               </div>
-              <div className="flex flex-col sm:flex-row gap-2 sm:justify-end pt-2">
+              <div className="flex flex-col sm:flex-row gap-3 sm:justify-end pt-2">
                 <button
                   type="button"
                   onClick={() => setSaveModalOpen(false)}
-                  className="rounded-xl bg-stone-100 px-5 py-2.5 font-bold text-stone-800 hover:bg-stone-200"
+                  className="min-h-[52px] rounded-xl bg-stone-100 px-5 py-3 text-base font-bold text-stone-800 hover:bg-stone-200 touch-manipulation"
                 >
                   إلغاء
                 </button>
@@ -2545,14 +2573,14 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => handleSaveToHistory('update')}
-                      className="px-5 py-2.5 rounded-xl bg-teal-600 text-white font-bold hover:bg-teal-700 shadow-sm"
+                      className="min-h-[52px] px-5 py-3 rounded-xl bg-teal-600 text-white text-base font-bold hover:bg-teal-700 shadow-sm touch-manipulation"
                     >
                       تحديث المحفوظ
                     </button>
                     <button
                       type="button"
                       onClick={() => handleSaveToHistory('new')}
-                      className="px-5 py-2.5 rounded-xl border border-stone-200 text-stone-800 font-bold hover:bg-stone-50"
+                      className="min-h-[52px] px-5 py-3 rounded-xl border border-stone-200 text-stone-800 text-base font-bold hover:bg-stone-50 touch-manipulation"
                     >
                       حفظ كنسخة جديدة
                     </button>
@@ -2561,7 +2589,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => handleSaveToHistory('new')}
-                    className="px-5 py-2.5 rounded-xl bg-teal-600 text-white font-bold hover:bg-teal-700 shadow-sm"
+                    className="min-h-[52px] px-5 py-3 rounded-xl bg-teal-600 text-white text-base font-bold hover:bg-teal-700 shadow-sm touch-manipulation"
                   >
                     حفظ في السجل
                   </button>
@@ -2587,13 +2615,13 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setHistoryOpen(false)}
-                className="text-stone-200 hover:text-white hover:bg-white/20 p-2 rounded-full transition-colors shrink-0 touch-manipulation"
+                className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center text-stone-200 hover:text-white hover:bg-white/20 rounded-full transition-colors shrink-0 touch-manipulation"
                 aria-label="إغلاق"
               >
-                <X className="h-6 w-6" />
+                <X className="h-7 w-7" aria-hidden />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto bg-stone-50/90 p-3 sm:p-4">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-stone-50/90 p-4 sm:p-5">
               {savedTables.length === 0 ? (
                 <div className="text-center py-16 text-stone-500">
                   <FolderOpen className="h-14 w-14 mx-auto text-stone-300 mb-3" />
@@ -2619,18 +2647,18 @@ export default function App() {
                           })}
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-2 shrink-0">
+                      <div className="flex flex-wrap gap-3 shrink-0">
                         <button
                           type="button"
                           onClick={() => handleLoadSaved(entry)}
-                          className="px-4 py-2 rounded-xl bg-teal-600 text-white text-sm font-bold hover:bg-teal-700"
+                          className="min-h-[48px] px-5 py-2.5 rounded-xl bg-teal-600 text-white text-base font-bold hover:bg-teal-700 touch-manipulation"
                         >
                           فتح للتحرير
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDeleteSaved(entry)}
-                          className="px-4 py-2 rounded-xl border border-red-200 text-red-600 text-sm font-bold hover:bg-red-50"
+                          className="min-h-[48px] px-5 py-2.5 rounded-xl border border-red-200 text-red-600 text-base font-bold hover:bg-red-50 touch-manipulation"
                         >
                           حذف
                         </button>

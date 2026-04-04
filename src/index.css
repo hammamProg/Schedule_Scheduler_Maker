@@ -13,11 +13,39 @@
   body {
     overflow-x: clip;
     font-family: var(--font-sans);
+    line-height: 1.6;
+    text-rendering: optimizeLegibility;
   }
 
   #root {
     min-height: 100dvh;
     min-height: 100svh;
+  }
+
+  /* 16px+ avoids iOS zoom-on-focus; clearer for older users */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 1rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* Faster taps on iOS (less double-tap zoom delay) */
+  button,
+  [type="button"],
+  [type="submit"],
+  [role="button"],
+  label[for] {
+    touch-action: manipulation;
   }
 }
 
@@ -34,6 +62,17 @@
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
   scrollbar-gutter: stable;
+  /* Wider scrollbar on touch phones for easier drag */
+  scrollbar-width: thin;
+}
+
+.schedule-scroll::-webkit-scrollbar {
+  height: 10px;
+}
+
+.schedule-scroll::-webkit-scrollbar-thumb {
+  background: rgba(13, 148, 136, 0.35);
+  border-radius: 999px;
 }
 
 /* Force 24h-style time control: hide AM/PM in Chromium / WebKit */
