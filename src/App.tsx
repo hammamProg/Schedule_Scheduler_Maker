@@ -580,6 +580,14 @@ function subjectsMatchingCellFilter(
   });
 }
 
+/** Same split as search: first word → subject name, rest → teacher name (for inline quick-add from the cell picker). */
+function splitCellSearchForQuickAdd(query: string): { subject: string; teacher: string } {
+  const normalized = query.trim().replace(/\s+/g, ' ');
+  if (!normalized) return { subject: '', teacher: '' };
+  const parts = normalized.split(' ');
+  return { subject: parts[0] ?? '', teacher: parts.slice(1).join(' ') };
+}
+
 /** Printable key on a grid cell: open subject picker and prefill search (not Space/Enter — handled separately). */
 function isCellTypingKey(e: React.KeyboardEvent): boolean {
   if (e.nativeEvent.isComposing) return false;
@@ -707,6 +715,11 @@ export default function App() {
   const [rangeSelection, setRangeSelection] = useState<{ anchor: GridCoord; extent: GridCoord } | null>(null);
   const [cellSubjectFilter, setCellSubjectFilter] = useState('');
   const [cellSubjectHighlight, setCellSubjectHighlight] = useState(0);
+  /** Inline «إضافة مادة» from the cell modal: first word / rest mirror cell search when not dirty. */
+  const [cellQuickSubject, setCellQuickSubject] = useState('');
+  const [cellQuickTeacher, setCellQuickTeacher] = useState('');
+  const [cellQuickAddDirty, setCellQuickAddDirty] = useState(false);
+  const [cellQuickAddError, setCellQuickAddError] = useState('');
   const [confirmState, setConfirmState] = useState<ConfirmState>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
   const tableRef = useRef<HTMLDivElement>(null);
@@ -727,6 +740,8 @@ export default function App() {
   const rangeShiftAnchorRef = useRef<GridCoord>({ period: PERIODS[0], grade: ALL_GRADES[0] });
   const rangeDragAnchorRef = useRef<GridCoord | null>(null);
   const rangePointerDownRef = useRef(false);
+  /** True if the current pointer gesture dragged across more than one cell (suppress single-click → picker). */
+  const scheduleMultiCellDragRef = useRef(false);
   const subjectsLatestRef = useRef<Subject[]>(subjects);
   const scheduleDateLatestRef = useRef(scheduleDate);
   subjectsLatestRef.current = subjects;
@@ -1046,10 +1061,19 @@ export default function App() {
     [subjects, cellSubjectFilter, teachers]
   );
 
+  /** No rows in the picker: offer inline add (empty catalog, or search narrowed to zero). */
+  const showCellQuickAdd = useMemo(
+    () =>
+      filteredCellSubjects.length === 0 &&
+      (subjects.length === 0 || cellSubjectFilter.trim().length > 0),
+    [filteredCellSubjects.length, subjects.length, cellSubjectFilter]
+  );
+
   useEffect(() => {
     if (!editingCell) return;
     const initialFilter = editingCell.filterPrefill ?? '';
     setCellSubjectFilter(initialFilter);
+    setCellQuickAddError('');
     const filteredForHighlight = subjectsMatchingCellFilter(subjects, initialFilter, teacherNameById);
     const currentId = schedule[editingCell.day]?.[editingCell.period]?.[editingCell.grade] ?? '';
     const idx = currentId ? filteredForHighlight.findIndex((s) => s.id === currentId) : -1;
@@ -1057,6 +1081,19 @@ export default function App() {
     const id = window.requestAnimationFrame(() => cellSubjectSearchRef.current?.focus());
     return () => window.cancelAnimationFrame(id);
   }, [editingCell, schedule, subjects, teachers]);
+
+  useEffect(() => {
+    setCellQuickAddDirty(false);
+  }, [cellSubjectFilter]);
+
+  useEffect(() => {
+    if (!editingCell) return;
+    if (filteredCellSubjects.length > 0) return;
+    if (cellQuickAddDirty) return;
+    const { subject, teacher } = splitCellSearchForQuickAdd(cellSubjectFilter);
+    setCellQuickSubject(subject);
+    setCellQuickTeacher(teacher);
+  }, [cellSubjectFilter, editingCell, filteredCellSubjects.length, cellQuickAddDirty]);
 
   useEffect(() => {
     setCellSubjectHighlight((i) =>
@@ -1081,6 +1118,9 @@ export default function App() {
     const endDrag = () => {
       rangePointerDownRef.current = false;
       rangeDragAnchorRef.current = null;
+      window.setTimeout(() => {
+        scheduleMultiCellDragRef.current = false;
+      }, 0);
     };
     window.addEventListener('pointerup', endDrag);
     window.addEventListener('pointercancel', endDrag);
@@ -1187,6 +1227,55 @@ export default function App() {
     }
     setNewSubject('');
     setSelectedTeacherId('');
+  };
+
+  /** Create teacher (if needed), subject, assign current cell — one undo step. */
+  const handleQuickAddSubjectAndAssign = () => {
+    if (!editingCell) return;
+    const normalizedName = normalizeSubjectNameKey(cellQuickSubject);
+    if (!normalizedName) {
+      setCellQuickAddError('أدخل اسم المادة.');
+      return;
+    }
+    const teacherNameRaw = normalizeTeacherNameKey(cellQuickTeacher);
+    let teacherId = '';
+    let nextTeachers = teachers;
+    if (teacherNameRaw) {
+      const existing = teachers.find((t) => normalizeTeacherNameKey(t.name) === teacherNameRaw);
+      if (existing) {
+        teacherId = existing.id;
+      } else {
+        teacherId = newEntityId();
+        nextTeachers = [...teachers, { id: teacherId, name: teacherNameRaw }];
+      }
+    }
+    const duplicate = subjects.some(
+      (s) =>
+        normalizeSubjectNameKey(s.name) === normalizedName &&
+        (s.teacherId || '') === teacherId
+    );
+    if (duplicate) {
+      setCellQuickAddError(
+        'توجد مادة بنفس الاسم ونفس المعلم. اخترها من القائمة أو عيّن معلماً مختلفاً.'
+      );
+      return;
+    }
+    setCellQuickAddError('');
+    const newId = newEntityId();
+    const { day, period, grade } = editingCell;
+    pushUndo();
+    if (nextTeachers.length > teachers.length) {
+      setTeachers(nextTeachers);
+    }
+    setSubjects((prev) => [...prev, { id: newId, name: normalizedName, teacherId }]);
+    setSchedule((prev) => {
+      const next = { ...prev };
+      if (!next[day]) next[day] = {};
+      if (!next[day][period]) next[day][period] = {};
+      next[day] = { ...next[day], [period]: { ...next[day][period], [grade]: newId } };
+      return next;
+    });
+    setEditingCell(null);
   };
 
   const handleEditSubject = (subject: Subject) => {
@@ -2084,11 +2173,12 @@ export default function App() {
                             role="gridcell"
                             tabIndex={isGridFocused ? 0 : -1}
                             aria-selected={inRangeSelection ? true : undefined}
-                            aria-label={`${period}، ${grade}${displayValue ? `، ${displayValue}` : ''}${hasTeacherCollision ? '، تعارض: نفس المعلم في صفين أو أكثر في هذه الحصة' : ''}، انقر مرتين لاختيار المادة`}
+                            aria-label={`${period}، ${grade}${displayValue ? `، ${displayValue}` : ''}${hasTeacherCollision ? '، تعارض: نفس المعلم في صفين أو أكثر في هذه الحصة' : ''}، انقر أو اكتب حرفاً لاختيار المادة`}
                             onFocus={() => setGridFocus({ period, grade })}
                             onKeyDown={(e) => handleScheduleCellKeyDown(e, period, grade)}
                             onPointerDown={(e) => {
                               if (e.button !== 0 || editingCell) return;
+                              scheduleMultiCellDragRef.current = false;
                               rangePointerDownRef.current = true;
                               rangeDragAnchorRef.current = { period, grade };
                             }}
@@ -2098,6 +2188,7 @@ export default function App() {
                               const a = rangeDragAnchorRef.current;
                               if (!a) return;
                               if (a.period === period && a.grade === grade) return;
+                              scheduleMultiCellDragRef.current = true;
                               rangeShiftAnchorRef.current = a;
                               setRangeSelection({ anchor: a, extent: { period, grade } });
                             }}
@@ -2117,13 +2208,13 @@ export default function App() {
                                 });
                                 return;
                               }
+                              if (scheduleMultiCellDragRef.current) {
+                                scheduleMultiCellDragRef.current = false;
+                                return;
+                              }
                               rangeShiftAnchorRef.current = { period, grade };
                               setRangeSelection(null);
                               focusScheduleCell(period, grade);
-                            }}
-                            onDoubleClick={(e) => {
-                              e.preventDefault();
-                              setRangeSelection(null);
                               openCellEditor(selectedDay, period, grade);
                             }}
                             className={`p-1.5 sm:p-3 border-l border-stone-200/80 text-center cursor-pointer transition-colors group relative touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white ${
@@ -2145,7 +2236,9 @@ export default function App() {
                                   : 'text-stone-400 border border-transparent group-hover:border-teal-300 border-dashed'
                               }`}
                             >
-                              {displayValue || <span className="print:hidden text-[11px] sm:text-sm">انقر مرتين للإضافة</span>}
+                              {displayValue || (
+                                <span className="print:hidden text-[11px] sm:text-sm">انقر أو اكتب للإضافة</span>
+                              )}
                               {displayValue ? null : <span className="hidden print:inline">—</span>}
                             </div>
                           </td>
@@ -2191,9 +2284,20 @@ export default function App() {
                 <h3 id="cell-picker-title" className="text-lg sm:text-2xl font-bold leading-snug">
                   اختيار المادة
                 </h3>
-                <p className="text-stone-200 mt-1.5 text-sm sm:text-base font-medium break-words">
-                  {editingCell.day} - الحصة {editingCell.period} - الصف {editingCell.grade}
-                </p>
+                <div
+                  className="mt-3 flex flex-wrap items-center gap-2 text-[11px] sm:text-xs"
+                  aria-label={`${editingCell.day}، الحصة ${editingCell.period}، الصف ${editingCell.grade}`}
+                >
+                  <span className="rounded-lg bg-white/10 px-2 py-1 font-semibold text-white/95 ring-1 ring-white/15">
+                    {editingCell.day}
+                  </span>
+                  <span className="rounded-lg bg-white/10 px-2 py-1 text-white/90 ring-1 ring-white/15">
+                    الحصة {editingCell.period}
+                  </span>
+                  <span className="rounded-lg bg-white/10 px-2 py-1 text-white/90 ring-1 ring-white/15">
+                    الصف {editingCell.grade}
+                  </span>
+                </div>
               </div>
               <button
                 type="button"
@@ -2207,101 +2311,170 @@ export default function App() {
 
             {/* Modal Body */}
             <div className="min-h-0 flex-1 overflow-y-auto bg-stone-50/90 p-4 sm:p-6">
-              {subjects.length === 0 ? (
-                <div className="text-center py-16 text-stone-400">
-                  <BookOpen className="h-16 w-16 mx-auto text-stone-300 mb-4" />
-                  <p className="text-xl font-bold text-stone-900">لم تقم بإضافة أي مواد بعد.</p>
-                  <p className="text-base mt-2">يرجى إغلاق هذه النافذة وإضافة المواد من قسم "إدارة المواد والمعلمين".</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div>
-                    <label htmlFor="cell-subject-search" className="block text-sm font-bold text-stone-800 mb-1.5">
-                      بحث سريع (لوحة المفاتيح)
-                    </label>
-                    <input
-                      id="cell-subject-search"
-                      ref={cellSubjectSearchRef}
-                      type="text"
-                      value={cellSubjectFilter}
-                      onChange={(e) => setCellSubjectFilter(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          const picked = filteredCellSubjects[cellSubjectHighlight];
-                          if (picked) handleSelectSubject(picked.id);
-                          return;
-                        }
-                        if (e.key === 'ArrowDown') {
-                          e.preventDefault();
-                          setCellSubjectHighlight((h) =>
-                            filteredCellSubjects.length === 0
-                              ? 0
-                              : Math.min(h + 1, filteredCellSubjects.length - 1)
-                          );
-                          return;
-                        }
-                        if (e.key === 'ArrowUp') {
-                          e.preventDefault();
-                          setCellSubjectHighlight((h) => Math.max(h - 1, 0));
-                          return;
-                        }
-                        if (e.key === 'Home') {
-                          e.preventDefault();
-                          setCellSubjectHighlight(0);
-                          return;
-                        }
-                        if (e.key === 'End') {
-                          e.preventDefault();
-                          if (filteredCellSubjects.length > 0) {
-                            setCellSubjectHighlight(filteredCellSubjects.length - 1);
-                          }
-                        }
-                      }}
-                      placeholder="مادة، أو مادة ثم معلم (مثال: عربي رحمة)"
-                      className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-stone-900 shadow-sm outline-none transition-all focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
-                      autoComplete="off"
-                      aria-describedby="cell-subject-kbd-hint"
-                    />
-                    <p id="cell-subject-kbd-hint" className="mt-2 text-xs text-stone-500 leading-relaxed">
-                      كلمة واحدة: تبحث في اسم المادة أو المعلم. كلمتان أو أكثر: الأولى للمادة والباقي للمعلم
-                      (مثال: عربي رحمة). الأسهم ↑↓ و Enter و Home / End و Esc كما سبق.
+              <div className="space-y-4">
+                {subjects.length === 0 ? (
+                  <div className="flex items-start gap-3 rounded-2xl border border-teal-100 bg-teal-50/80 p-4 text-sm text-teal-950">
+                    <BookOpen className="h-6 w-6 shrink-0 text-teal-700 mt-0.5" />
+                    <p className="leading-relaxed">
+                      لا توجد مواد في القائمة بعد. اكتب اسم المادة والمعلم هنا أو في الحقول أدناه، ثم أضفها مباشرة
+                      إلى الجدول — أو استخدم قسم «إدارة المواد والمعلمين» لاحقاً للتعديل الجماعي.
                     </p>
                   </div>
-                  {filteredCellSubjects.length === 0 ? (
-                    <p className="text-center py-8 text-stone-500 font-medium">لا توجد مواد مطابقة للبحث.</p>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
-                      {filteredCellSubjects.map((subject, idx) => {
-                        const isSelected =
-                          schedule[editingCell.day]?.[editingCell.period]?.[editingCell.grade] === subject.id;
-                        const isHighlighted = idx === cellSubjectHighlight;
-                        const modalTeacher = teacherNameById(subject.teacherId);
-                        return (
-                          <button
-                            key={subject.id}
-                            type="button"
-                            onClick={() => handleSelectSubject(subject.id)}
-                            onMouseEnter={() => setCellSubjectHighlight(idx)}
-                            className={`flex min-h-[88px] flex-col items-center justify-center rounded-2xl border-2 p-3 text-center transition-all touch-manipulation active:scale-[0.98] sm:min-h-[100px] sm:p-4 ${
-                              isHighlighted
-                                ? 'border-teal-600 bg-teal-50 ring-2 ring-teal-400/60 ring-offset-2 ring-offset-stone-50'
-                                : isSelected
-                                  ? 'border-teal-600 bg-teal-50 text-stone-900 shadow-md sm:scale-[1.02]'
-                                  : 'border-stone-200/80 bg-white text-stone-700 hover:border-teal-400 hover:bg-teal-50/40 hover:shadow-sm'
-                            }`}
-                          >
-                            <span className="font-bold text-base sm:text-lg leading-tight">{subject.name}</span>
-                            {modalTeacher ? (
-                              <span className="text-sm mt-1 opacity-80">{modalTeacher}</span>
-                            ) : null}
-                          </button>
+                ) : null}
+                <div>
+                  <label htmlFor="cell-subject-search" className="block text-sm font-bold text-stone-800 mb-1.5">
+                    بحث سريع (لوحة المفاتيح)
+                  </label>
+                  <input
+                    id="cell-subject-search"
+                    ref={cellSubjectSearchRef}
+                    type="text"
+                    value={cellSubjectFilter}
+                    onChange={(e) => {
+                      setCellSubjectFilter(e.target.value);
+                      setCellQuickAddError('');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (filteredCellSubjects.length > 0) {
+                          const picked = filteredCellSubjects[cellSubjectHighlight];
+                          if (picked) handleSelectSubject(picked.id);
+                        } else if (showCellQuickAdd) {
+                          handleQuickAddSubjectAndAssign();
+                        }
+                        return;
+                      }
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setCellSubjectHighlight((h) =>
+                          filteredCellSubjects.length === 0
+                            ? 0
+                            : Math.min(h + 1, filteredCellSubjects.length - 1)
                         );
-                      })}
-                    </div>
-                  )}
+                        return;
+                      }
+                      if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setCellSubjectHighlight((h) => Math.max(h - 1, 0));
+                        return;
+                      }
+                      if (e.key === 'Home') {
+                        e.preventDefault();
+                        setCellSubjectHighlight(0);
+                        return;
+                      }
+                      if (e.key === 'End') {
+                        e.preventDefault();
+                        if (filteredCellSubjects.length > 0) {
+                          setCellSubjectHighlight(filteredCellSubjects.length - 1);
+                        }
+                      }
+                    }}
+                    placeholder="مادة، أو مادة ثم معلم (مثال: عربي رحمة)"
+                    className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-stone-900 shadow-sm outline-none transition-all focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                    autoComplete="off"
+                    aria-describedby="cell-subject-kbd-hint"
+                  />
+                  <p id="cell-subject-kbd-hint" className="mt-2 text-xs text-stone-500 leading-relaxed">
+                    كلمة واحدة: تبحث في اسم المادة أو المعلم. كلمتان أو أكثر: الأولى للمادة والباقي للمعلم
+                    (مثال: عربي رحمة). عند عدم وجود نتائج يمكنك إضافة مادة ومعلم جديدين من الصندوق التالي. الأسهم
+                    ↑↓ و Enter و Home / End و Esc كما سبق.
+                  </p>
                 </div>
-              )}
+                {filteredCellSubjects.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
+                    {filteredCellSubjects.map((subject, idx) => {
+                      const isSelected =
+                        schedule[editingCell.day]?.[editingCell.period]?.[editingCell.grade] === subject.id;
+                      const isHighlighted = idx === cellSubjectHighlight;
+                      const modalTeacher = teacherNameById(subject.teacherId);
+                      return (
+                        <button
+                          key={subject.id}
+                          type="button"
+                          onClick={() => handleSelectSubject(subject.id)}
+                          onMouseEnter={() => setCellSubjectHighlight(idx)}
+                          className={`flex min-h-[88px] flex-col items-center justify-center rounded-2xl border-2 p-3 text-center transition-all touch-manipulation active:scale-[0.98] sm:min-h-[100px] sm:p-4 ${
+                            isHighlighted
+                              ? 'border-teal-600 bg-teal-50 ring-2 ring-teal-400/60 ring-offset-2 ring-offset-stone-50'
+                              : isSelected
+                                ? 'border-teal-600 bg-teal-50 text-stone-900 shadow-md sm:scale-[1.02]'
+                                : 'border-stone-200/80 bg-white text-stone-700 hover:border-teal-400 hover:bg-teal-50/40 hover:shadow-sm'
+                          }`}
+                        >
+                          <span className="font-bold text-base sm:text-lg leading-tight">{subject.name}</span>
+                          {modalTeacher ? (
+                            <span className="text-sm mt-1 opacity-80">{modalTeacher}</span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {showCellQuickAdd ? (
+                  <div className="rounded-2xl border border-teal-200/90 bg-white p-4 sm:p-5 shadow-sm ring-1 ring-teal-100/80 space-y-4">
+                    <div>
+                      <h4 className="text-base font-extrabold text-stone-900">إضافة مادة (ومعلم إن لزم)</h4>
+                      <p className="mt-1 text-sm text-stone-600 leading-relaxed">
+                        يُفسَّر البحث أعلاه كما يلي: أول كلمة اسم المادة، والباقي اسم المعلم. عدّل الحقلين إذا احتجت
+                        اسم مادة من عدة كلمات.
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      <div>
+                        <label htmlFor="cell-quick-subject" className="block text-sm font-bold text-stone-800 mb-1.5">
+                          اسم المادة
+                        </label>
+                        <input
+                          id="cell-quick-subject"
+                          type="text"
+                          value={cellQuickSubject}
+                          onChange={(e) => {
+                            setCellQuickSubject(e.target.value);
+                            setCellQuickAddDirty(true);
+                            setCellQuickAddError('');
+                          }}
+                          className="w-full rounded-xl border border-stone-200 bg-stone-50/80 px-4 py-3 text-stone-900 shadow-sm outline-none transition-all focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                          placeholder="مثال: رياضيات"
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="cell-quick-teacher" className="block text-sm font-bold text-stone-800 mb-1.5">
+                          المعلم (اختياري)
+                        </label>
+                        <input
+                          id="cell-quick-teacher"
+                          type="text"
+                          value={cellQuickTeacher}
+                          onChange={(e) => {
+                            setCellQuickTeacher(e.target.value);
+                            setCellQuickAddDirty(true);
+                            setCellQuickAddError('');
+                          }}
+                          className="w-full rounded-xl border border-stone-200 bg-stone-50/80 px-4 py-3 text-stone-900 shadow-sm outline-none transition-all focus:border-teal-500 focus:ring-2 focus:ring-teal-500"
+                          placeholder="يُنشأ معلم جديد إذا لم يكن اسمه مسجّلاً"
+                          autoComplete="off"
+                        />
+                      </div>
+                    </div>
+                    {cellQuickAddError ? (
+                      <p className="text-sm font-medium text-red-600" role="alert">
+                        {cellQuickAddError}
+                      </p>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={handleQuickAddSubjectAndAssign}
+                      className="w-full sm:w-auto inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-3 font-bold text-white shadow-md shadow-teal-900/20 transition-colors hover:bg-teal-700 touch-manipulation"
+                    >
+                      <Plus className="h-5 w-5 shrink-0" />
+                      <span>إضافة مادة ووضعها في الجدول</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             {/* Modal Footer */}
